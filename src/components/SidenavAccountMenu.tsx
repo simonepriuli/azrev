@@ -1,11 +1,11 @@
 import {
   ApartmentIcon,
-  ArrowDown01Icon,
   ArrowRight01Icon,
-  DashboardSpeed01Icon,
   LinkSquare02Icon,
   LogoutSquare01Icon,
   Settings01Icon,
+  ThirdBracketSquareIcon,
+  Tick01Icon,
   UserCircle02Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -16,12 +16,17 @@ import { writeStoredProjectId } from '../lib/selectedProjectStorage'
 /** Palette / spacing aligned with account menu reference (neutral grays, inset hover). */
 const popoverSurface =
   'rounded-2xl border border-[#EEEEEE] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
-const popoverInset = 'p-2'
-const divider = 'h-px bg-[#EEEEEE]'
+/** 8px padding at panel edges; 8px vertical gap between each block (incl. dividers) */
+const popoverContent = 'flex flex-col gap-2 px-2 pb-2 pt-2'
+const divider = 'h-px w-full shrink-0 bg-[#EEEEEE]'
 const textPrimary = 'text-[#1A1A1A]'
 const textMuted = 'text-[#737373]'
-const rowHover = 'rounded-lg hover:bg-[#F5F5F5]'
-const rowPad = 'gap-3 px-3 py-2.5'
+/** Popover header org label — same weight as rows, lighter color so it reads as non-action */
+const textHeaderLabel = 'text-[#A9A9AA]'
+const rowHover = 'rounded-lg hover:bg-slate-900/5'
+/** Fixed 32px row height for popover menu items */
+const panelRow = 'flex h-8 min-h-8 max-h-8 w-full shrink-0 items-center gap-3 px-3'
+const panelRowInteractive = `${panelRow} rounded-lg text-xs font-medium ${textPrimary} ${rowHover}`
 const iconPrimary = 'text-[#1A1A1A]'
 const iconMuted = 'text-[#737373]'
 
@@ -31,7 +36,6 @@ type Props = {
   projectsLoading: boolean
   projectsError: Error | null
   projectId: string | null
-  projectName: string | null
   setProject: (id: string, name: string) => void
   onSignOut: () => void
   signOutPending: boolean
@@ -43,7 +47,6 @@ export function SidenavAccountMenu({
   projectsLoading,
   projectsError,
   projectId,
-  projectName,
   setProject,
   onSignOut,
   signOutPending,
@@ -83,13 +86,13 @@ export function SidenavAccountMenu({
   return (
     <div
       ref={rootRef}
-      className="app-region-no-drag relative shrink-0 border-t border-[#EEEEEE] bg-[#E5E5E5] px-1.5 pb-2 pt-1"
+      className="app-region-no-drag sidenav-footer relative shrink-0 bg-transparent px-1.5 pb-2 pt-1"
     >
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
-        className={`flex w-full items-center ${rowPad} text-left text-sm font-medium ${textPrimary} ${rowHover}`}
+        className={`flex h-8 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium ${textPrimary} ${rowHover}`}
         onClick={() => setOpen((v) => !v)}
       >
         <HugeiconsIcon
@@ -108,64 +111,66 @@ export function SidenavAccountMenu({
           aria-label="Account and workspace"
           className={`absolute bottom-full left-2 right-2 z-30 mb-1 overflow-hidden ${popoverSurface}`}
         >
-          <div className={popoverInset}>
-            <div className={`flex items-center ${rowPad} pb-1 pt-0.5`}>
+          <div className={popoverContent}>
+            <div className={`${panelRow} text-xs font-medium ${textHeaderLabel}`}>
               <HugeiconsIcon
                 icon={UserCircle02Icon}
-                size={20}
+                size={16}
                 strokeWidth={1.5}
-                className={`shrink-0 ${iconMuted}`}
+                className={`shrink-0 ${textHeaderLabel}`}
                 aria-hidden
               />
-              <span className={`min-w-0 truncate text-xs font-medium ${textMuted}`}>
-                {organization ?? 'Not connected'}
-              </span>
+              <span className="min-w-0 truncate">{organization ?? 'Not connected'}</span>
             </div>
 
-            <div className={`${divider} my-1`} />
+            <div className={divider} role="separator" />
 
             <div>
               <button
                 type="button"
                 aria-expanded={projectsPanelOpen}
-                className={`flex w-full items-center ${rowPad} text-left ${rowHover} ${textPrimary}`}
+                className={`${panelRowInteractive} text-left`}
                 onClick={() => setProjectsPanelOpen((v) => !v)}
               >
                 <HugeiconsIcon
-                  icon={DashboardSpeed01Icon}
-                  size={18}
+                  icon={ThirdBracketSquareIcon}
+                  size={16}
                   strokeWidth={1.5}
                   className={`shrink-0 ${iconPrimary}`}
                   aria-hidden
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium">Project</span>
-                  {projectName ? (
-                    <span className={`mt-0.5 block truncate text-[10px] font-normal ${textMuted}`}>
-                      {projectName}
-                    </span>
-                  ) : null}
-                </span>
+                <span className="min-w-0 flex-1 truncate">Project</span>
                 <HugeiconsIcon
-                  icon={projectsPanelOpen ? ArrowDown01Icon : ArrowRight01Icon}
+                  icon={ArrowRight01Icon}
                   size={16}
                   strokeWidth={1.5}
-                  className={`shrink-0 ${iconMuted} transition-transform duration-150`}
+                  className={`shrink-0 ${iconMuted} transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${
+                    projectsPanelOpen ? 'rotate-90' : ''
+                  }`}
                   aria-hidden
                 />
               </button>
 
-              {projectsPanelOpen ? (
-                <div className="mt-1 border-t border-[#EEEEEE] pt-2">
+              <div
+                className={`grid transition-[grid-template-rows] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none ${
+                  projectsPanelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                }`}
+              >
+                <div
+                  className={`min-h-0 overflow-hidden ${projectsPanelOpen ? '' : 'pointer-events-none'}`}
+                  aria-hidden={!projectsPanelOpen}
+                >
                   {projectsLoading ? (
-                    <p className={`px-3 py-2 text-xs ${textMuted}`}>Loading projects…</p>
+                    <p className={`${panelRow} text-xs ${textMuted}`}>Loading projects…</p>
                   ) : projectsError ? (
-                    <p className="px-3 py-2 text-xs text-red-600">{projectsError.message}</p>
+                    <p className={`${panelRow} truncate text-xs text-red-600`} title={projectsError.message}>
+                      {projectsError.message}
+                    </p>
                   ) : projects.length === 0 ? (
-                    <p className={`px-3 py-2 text-xs ${textMuted}`}>No projects found.</p>
+                    <p className={`${panelRow} text-xs ${textMuted}`}>No projects found.</p>
                   ) : (
                     <ul
-                      className="max-h-48 space-y-0.5 overflow-y-auto overscroll-contain py-0.5"
+                      className="max-h-48 overflow-y-auto overscroll-contain py-0"
                       role="listbox"
                       aria-label="Projects"
                     >
@@ -177,11 +182,8 @@ export function SidenavAccountMenu({
                               type="button"
                               role="option"
                               aria-selected={selected}
-                              className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-xs ${
-                                selected
-                                  ? `bg-[#EBEBEB] font-medium ${textPrimary} hover:bg-[#E5E5E5]`
-                                  : `${textPrimary} ${rowHover}`
-                              }`}
+                              tabIndex={projectsPanelOpen ? undefined : -1}
+                              className={`${panelRow} rounded-lg text-left text-xs font-normal ${textPrimary} ${rowHover}`}
                               onClick={() => {
                                 setProject(p.id, p.name)
                                 writeStoredProjectId(organization, p.id)
@@ -189,6 +191,17 @@ export function SidenavAccountMenu({
                               }}
                             >
                               <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                              <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                                {selected ? (
+                                  <HugeiconsIcon
+                                    icon={Tick01Icon}
+                                    size={14}
+                                    strokeWidth={1.75}
+                                    className={iconPrimary}
+                                    aria-hidden
+                                  />
+                                ) : null}
+                              </span>
                             </button>
                           </li>
                         )
@@ -196,17 +209,18 @@ export function SidenavAccountMenu({
                     </ul>
                   )}
                 </div>
-              ) : null}
+              </div>
             </div>
 
+            <div className={divider} role="separator" />
+
             {adoOrgUrl ? (
-              <>
-                <div className={`${divider} my-1`} />
+              <div className="flex flex-col gap-1">
                 <a
                   href={`${adoOrgUrl}/_settings/organization`}
                   target="_blank"
                   rel="noreferrer"
-                  className={`flex items-center ${rowPad} text-xs font-medium ${textPrimary} ${rowHover}`}
+                  className={panelRowInteractive}
                   onClick={() => close()}
                 >
                   <HugeiconsIcon
@@ -225,29 +239,45 @@ export function SidenavAccountMenu({
                     aria-hidden
                   />
                 </a>
-              </>
-            ) : null}
-
-            <div className={`${divider} my-1`} />
-
-            <button
-              type="button"
-              className={`flex w-full items-center ${rowPad} text-left text-xs font-medium ${textPrimary} ${rowHover} disabled:opacity-50`}
-              onClick={() => {
-                close()
-                onSignOut()
-              }}
-              disabled={signOutPending}
-            >
-              <HugeiconsIcon
-                icon={LogoutSquare01Icon}
-                size={16}
-                strokeWidth={1.5}
-                className={`shrink-0 ${iconPrimary}`}
-                aria-hidden
-              />
-              <span>{signOutPending ? 'Signing out…' : 'Log out'}</span>
-            </button>
+                <button
+                  type="button"
+                  className={`${panelRowInteractive} text-left disabled:opacity-50`}
+                  onClick={() => {
+                    close()
+                    onSignOut()
+                  }}
+                  disabled={signOutPending}
+                >
+                  <HugeiconsIcon
+                    icon={LogoutSquare01Icon}
+                    size={16}
+                    strokeWidth={1.5}
+                    className={`shrink-0 ${iconPrimary}`}
+                    aria-hidden
+                  />
+                  <span>{signOutPending ? 'Signing out…' : 'Log out'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`${panelRowInteractive} text-left disabled:opacity-50`}
+                onClick={() => {
+                  close()
+                  onSignOut()
+                }}
+                disabled={signOutPending}
+              >
+                <HugeiconsIcon
+                  icon={LogoutSquare01Icon}
+                  size={16}
+                  strokeWidth={1.5}
+                  className={`shrink-0 ${iconPrimary}`}
+                  aria-hidden
+                />
+                <span>{signOutPending ? 'Signing out…' : 'Log out'}</span>
+              </button>
+            )}
           </div>
         </div>
       ) : null}

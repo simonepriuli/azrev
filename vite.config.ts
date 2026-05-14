@@ -25,6 +25,19 @@ export default defineConfig({
       },
       preload: {
         input: path.join(__dirname, 'electron/preload.ts'),
+        // With package "type":"module", the plugin names output `preload.mjs` but Rollup
+        // still emits CommonJS (`require`). Electron loads `.mjs` as ESM, so `require`
+        // is missing and the bridge never mounts — force a `.cjs` filename instead.
+        vite: {
+          build: {
+            rollupOptions: {
+              output: {
+                entryFileNames: 'preload.cjs',
+                chunkFileNames: 'preload-chunk.cjs',
+              },
+            },
+          },
+        },
       },
       renderer: process.env.NODE_ENV === 'test' ? undefined : {},
     }),

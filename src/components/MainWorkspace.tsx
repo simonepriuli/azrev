@@ -250,7 +250,6 @@ export function MainWorkspace() {
             projectsLoading={projects.isLoading}
             projectsError={projects.error instanceof Error ? projects.error : null}
             projectId={projectId}
-            projectName={projectName}
             setProject={setProject}
             onSignOut={() => disconnect.mutate()}
             signOutPending={disconnect.isPending}

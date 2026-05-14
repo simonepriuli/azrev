@@ -87,6 +87,31 @@ html:not(.dark) .sidebar-translucent {
   color: #0f0f0f;
 }
 
-html:not(.dark) .sidebar-translucent .sidenav-footer {
-  background-color: transparent;
+/* Vibrancy background varies in luminance; pale slate grays wash out — use stronger neutrals */
+html:not(.dark) .sidebar-translucent .text-slate-300 {
+  color: rgb(71 85 105);
+}
+html:not(.dark) .sidebar-translucent .text-slate-400 {
+  color: rgb(51 65 85);
+}
+html:not(.dark) .sidebar-translucent .text-slate-500 {
+  color: rgb(51 65 85);
+}
+html:not(.dark) .sidebar-translucent .text-slate-600 {
+  color: rgb(30 41 59);
+}
+html:not(.dark) .sidebar-translucent .text-slate-700 {
+  color: rgb(15 23 42);
+}
+html:not(.dark) .sidebar-translucent .text-slate-800 {
+  color: rgb(15 23 42);
+}
+
+html:not(.dark) .sidebar-translucent .hover\:text-slate-800:hover {
+  color: rgb(15 23 42);
+}
+
+/* Account strip uses Tailwind arbitrary `text-[#737373]` — substring is stable in generated class names */
+html:not(.dark) .sidebar-translucent [class*='737373'] {
+  color: #3d3d3d !important;
 }

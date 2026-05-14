@@ -51,7 +51,7 @@ export function RepoPullRequestList({
   }
 
   return (
-    <ul className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-200/80 pl-2 pb-1">
+    <ul className="ml-5 mt-0.5 space-y-0.5 pb-1">
       {prs.isLoading ? (
         <li className="py-1 text-xs text-slate-500">Loading…</li>
       ) : prs.error ? (

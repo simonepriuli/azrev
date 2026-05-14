@@ -6,7 +6,7 @@ import { useAuthStatus } from './queries/adoQueries'
 const electronMacVibrancy =
   typeof window !== 'undefined' && window.azrev?.platform === 'darwin'
 
-const appShellBg = electronMacVibrancy ? 'bg-transparent' : 'bg-slate-50'
+const appShellBg = electronMacVibrancy ? 'bg-white' : 'bg-slate-50'
 
 export default function App() {
   const qc = useQueryClient()
