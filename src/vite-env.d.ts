@@ -20,6 +20,7 @@ declare global {
           method?: string
           body?: unknown
           accept?: string
+          service?: 'dev' | 'vssps'
         }) => Promise<
           | { success: true; status: number; contentType: string | null; kind: 'json'; json: unknown }
           | { success: true; status: number; contentType: string | null; kind: 'text'; text: string }

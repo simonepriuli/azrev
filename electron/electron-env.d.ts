@@ -13,6 +13,7 @@ type AzrevAdoRequestPayload = {
   method?: string
   body?: unknown
   accept?: string
+  service?: 'dev' | 'vssps'
 }
 
 type AzrevAdoResponse =

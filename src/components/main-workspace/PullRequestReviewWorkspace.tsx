@@ -3,6 +3,7 @@ import type { GitPullRequestChangeEntry, GitPullRequestDetail } from '../../lib/
 import { normalizeChangeType } from '../../queries/adoQueries'
 import { FileDiffPane } from '../FileDiffPane'
 import { ApplicationHeader } from './ApplicationHeader'
+import type { PullRequestHeaderActions } from './pullRequestActionUiState'
 import type { PullRequestStatusPresentation } from './pullRequestStatusPresentation'
 import { formatBranchRef } from './pullRequestStatusPresentation'
 import { SidebarToggleButton } from './SidebarToggleButton'
@@ -27,6 +28,9 @@ type PullRequestReviewWorkspaceProps = {
   selectedChangePath: string | null
   onSelectChangePath: (path: string) => void
   fileDiff: UseQueryResult<SelectedFileDiffData>
+  pullRequestActions?: PullRequestHeaderActions
+  pullRequestMutationError: string | null
+  onDismissPullRequestMutationError: () => void
 }
 
 export function PullRequestReviewWorkspace({
@@ -44,6 +48,9 @@ export function PullRequestReviewWorkspace({
   selectedChangePath,
   onSelectChangePath,
   fileDiff,
+  pullRequestActions,
+  pullRequestMutationError,
+  onDismissPullRequestMutationError,
 }: PullRequestReviewWorkspaceProps) {
   return (
     <>
@@ -60,7 +67,7 @@ export function PullRequestReviewWorkspace({
             <p className="text-sm text-slate-500">Loading pull request…</p>
           </div>
         ) : prDetail && pullRequestStatus ? (
-          <div className="min-w-0">
+          <div className="min-w-0 w-full">
             <ApplicationHeader
               reserveSidebarToggleSpace={!sidebarOpen}
               showSidebarToggle={showMainSidebarToggle}
@@ -69,7 +76,20 @@ export function PullRequestReviewWorkspace({
               title={prDetail.title}
               status={pullRequestStatus}
               onToggleSidebar={onToggleSidebar}
+              pullRequestActions={pullRequestActions}
             />
+            {pullRequestMutationError ? (
+              <div className="app-region-no-drag mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-950">
+                <span className="min-w-0 flex-1">{pullRequestMutationError}</span>
+                <button
+                  type="button"
+                  className="shrink-0 rounded px-1.5 py-0.5 font-medium text-amber-900 hover:bg-amber-100"
+                  onClick={onDismissPullRequestMutationError}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
             <p className="mt-1 text-xs text-slate-500">
               {pullRequestStatus.label}
               {prDetail.createdBy?.displayName ? ` · ${prDetail.createdBy.displayName}` : ''}

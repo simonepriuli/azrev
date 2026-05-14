@@ -4,23 +4,27 @@ import { useNavigate } from 'react-router-dom'
 import { readStoredProjectId, writeStoredProjectId } from '../lib/selectedProjectStorage'
 import {
   authStatusQueryKey,
+  useApprovePullRequestMutation,
   useAuthStatus,
+  useCompletePullRequestMutation,
+  useCurrentAdoReviewerIdentities,
   useIterationChanges,
   useIterationDetail,
   useLatestIterationId,
   useProjects,
   usePullRequest,
+  usePullRequestReviewers,
   useRepositories,
   useSelectedFileDiff,
   filterDiffableChanges,
 } from '../queries/adoQueries'
 import { useNavStore } from '../store/navStore'
+import { usePullRequestStatusFilterStore } from '../store/pullRequestStatusFilterStore'
 import { electronMacVibrancy, isMacUA, mainSidebarToggleDelayMs } from './main-workspace/constants'
-import { defaultPullRequestStatusFilters } from './main-workspace/SidenavPullRequestFilterMenu'
+import { getPullRequestActionUiState, type PullRequestHeaderActions } from './main-workspace/pullRequestActionUiState'
 import { getPullRequestStatusPresentation } from './main-workspace/pullRequestStatusPresentation'
 import { MainWorkspaceNoPrSelected } from './main-workspace/MainWorkspaceNoPrSelected'
 import { MainWorkspaceSidebar } from './main-workspace/MainWorkspaceSidebar'
-import type { PullRequestStatusFilter } from './RepoPullRequestList'
 import { PullRequestReviewWorkspace } from './main-workspace/PullRequestReviewWorkspace'
 
 export function MainWorkspace() {
@@ -44,9 +48,8 @@ export function MainWorkspace() {
   } = useNavStore()
 
   const [expandedRepoIds, setExpandedRepoIds] = useState(() => new Set<string>())
-  const [pullRequestStatusFilters, setPullRequestStatusFilters] = useState<PullRequestStatusFilter[]>(
-    () => [...defaultPullRequestStatusFilters],
-  )
+  const pullRequestStatusFilters = usePullRequestStatusFilterStore((s) => s.statusFilters)
+  const setPullRequestStatusFilters = usePullRequestStatusFilterStore((s) => s.setStatusFilters)
   const [statusFilterOpen, setStatusFilterOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showMainSidebarToggle, setShowMainSidebarToggle] = useState(false)
@@ -146,6 +149,127 @@ export function MainWorkspace() {
     setProject(first.id, first.name)
   }, [organization, projects.isLoading, projects.error, projects.data?.value, projectId, setProject])
   const pr = usePullRequest(organization, projectName ?? undefined, repositoryId ?? undefined, pullRequestId ?? undefined)
+  const prReviewers = usePullRequestReviewers(
+    organization,
+    projectName ?? undefined,
+    repositoryId ?? undefined,
+    pullRequestId ?? undefined,
+  )
+  const currentReviewerIdentities = useCurrentAdoReviewerIdentities(organization)
+  const approvePr = useApprovePullRequestMutation()
+  const completePr = useCompletePullRequestMutation()
+  const [prMutationError, setPrMutationError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPrMutationError(null)
+  }, [repositoryId, pullRequestId])
+
+  const prActionCtx = useMemo(
+    () => ({
+      userId: currentReviewerIdentities.userId,
+      userUniqueName: currentReviewerIdentities.userUniqueName,
+      userIdentities: currentReviewerIdentities.identities,
+      identityLoading: currentReviewerIdentities.isPending,
+    }),
+    [
+      currentReviewerIdentities.identities,
+      currentReviewerIdentities.isPending,
+      currentReviewerIdentities.userId,
+      currentReviewerIdentities.userUniqueName,
+    ],
+  )
+
+  const prActionState = useMemo(
+    () =>
+      getPullRequestActionUiState(
+        pr.data
+          ? {
+              ...pr.data,
+              reviewers: prReviewers.data ?? pr.data.reviewers,
+            }
+          : undefined,
+        prActionCtx,
+      ),
+    [pr.data, prActionCtx, prReviewers.data],
+  )
+
+  const onApprovePr = useCallback(() => {
+    if (!organization || !projectName || !repositoryId || pullRequestId == null || !pr.data) return
+    const st = getPullRequestActionUiState(
+      {
+        ...pr.data,
+        reviewers: prReviewers.data ?? pr.data.reviewers,
+      },
+      prActionCtx,
+    )
+    if (!st.myReviewerId) return
+    setPrMutationError(null)
+    approvePr.mutate(
+      {
+        organization,
+        projectName,
+        repositoryId,
+        pullRequestId,
+        reviewerId: st.myReviewerId,
+      },
+      {
+        onError: (e: unknown) =>
+          setPrMutationError(e instanceof Error ? e.message : 'Approve failed'),
+      },
+    )
+  }, [organization, projectName, repositoryId, pullRequestId, pr.data, prReviewers.data, prActionCtx, approvePr])
+
+  const onMergePr = useCallback(() => {
+    if (!organization || !projectName || !repositoryId || pullRequestId == null || !pr.data) return
+    const commitId = pr.data.lastMergeSourceCommit?.commitId
+    if (!commitId) return
+    setPrMutationError(null)
+    completePr.mutate(
+      {
+        organization,
+        projectName,
+        repositoryId,
+        pullRequestId,
+        sourceCommitId: commitId,
+        prTitle: pr.data.title,
+      },
+      {
+        onError: (e: unknown) =>
+          setPrMutationError(e instanceof Error ? e.message : 'Merge failed'),
+      },
+    )
+  }, [organization, projectName, repositoryId, pullRequestId, pr.data, completePr])
+
+  const pullRequestActions = useMemo((): PullRequestHeaderActions | undefined => {
+    if (!organization || !projectName || !repositoryId || pullRequestId == null || !pr.data) {
+      return undefined
+    }
+    return {
+      showApprove: prActionState.showApprove,
+      showMerge: prActionState.showMerge,
+      approveDisabled: prActionState.approveDisabled,
+      mergeDisabled: prActionState.mergeDisabled,
+      approveDisabledReason: prActionState.approveDisabledReason,
+      mergeDisabledReason: prActionState.mergeDisabledReason,
+      approvePending: approvePr.isPending,
+      mergePending: completePr.isPending,
+      onApprove: onApprovePr,
+      onMerge: onMergePr,
+    }
+  }, [
+    organization,
+    projectName,
+    repositoryId,
+    pullRequestId,
+    pr.data,
+    prActionState,
+    approvePr.isPending,
+    completePr.isPending,
+    onApprovePr,
+    onMergePr,
+  ])
+
+  const dismissPrMutationError = useCallback(() => setPrMutationError(null), [])
   const iterationIdQuery = useLatestIterationId(
     organization,
     projectName ?? undefined,
@@ -269,6 +393,9 @@ export function MainWorkspace() {
               selectedChangePath={selectedChangePath}
               onSelectChangePath={setSelectedChangePath}
               fileDiff={fileDiff}
+              pullRequestActions={pullRequestActions}
+              pullRequestMutationError={prMutationError}
+              onDismissPullRequestMutationError={dismissPrMutationError}
             />
           )}
         </main>

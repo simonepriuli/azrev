@@ -98,7 +98,11 @@ function clearPat() {
  * `pathAfterOrg` may include `?foo=bar` — that part must not be URL-encoded into the path
  * (ADO returns HTTP 400 "dangerous Request.Path" when `?` ends up inside the path).
  */
-function buildAdoUrl(organization: string, pathAfterOrg: string): URL {
+function buildAdoUrl(
+  organization: string,
+  pathAfterOrg: string,
+  service: 'dev' | 'vssps' = 'dev',
+): URL {
   const trimmed = pathAfterOrg.replace(/^\/+/, '')
   const q = trimmed.indexOf('?')
   const pathOnly = q === -1 ? trimmed : trimmed.slice(0, q)
@@ -106,7 +110,8 @@ function buildAdoUrl(organization: string, pathAfterOrg: string): URL {
 
   const segments = [organization, ...pathOnly.split('/').filter(Boolean)]
   const encodedPath = segments.map((s) => encodeURIComponent(s)).join('/')
-  const url = new URL(`https://dev.azure.com/${encodedPath}`)
+  const hostname = service === 'vssps' ? 'vssps.dev.azure.com' : 'dev.azure.com'
+  const url = new URL(`https://${hostname}/${encodedPath}`)
 
   if (queryPart.length > 0) {
     const incoming = new URLSearchParams(queryPart)
@@ -268,6 +273,7 @@ ipcMain.handle(
       method?: string
       body?: unknown
       accept?: string
+      service?: 'dev' | 'vssps'
     },
   ) => {
     const pat = readPat()
@@ -280,8 +286,8 @@ ipcMain.handle(
       throw new Error('Organization mismatch')
     }
     assertSafePath(payload.pathAfterOrg)
-    const url = buildAdoUrl(organization, payload.pathAfterOrg)
-    if (url.hostname !== 'dev.azure.com') {
+    const url = buildAdoUrl(organization, payload.pathAfterOrg, payload.service)
+    if (url.hostname !== 'dev.azure.com' && url.hostname !== 'vssps.dev.azure.com') {
       throw new Error('Unexpected host')
     }
     if (!url.searchParams.has('api-version')) {

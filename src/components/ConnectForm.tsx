@@ -65,7 +65,7 @@ export function ConnectForm() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <button
         type="button"
-        className="rounded-full bg-black px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        className="rounded-xl [corner-shape:squircle] bg-black px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         disabled={connect.isPending || !organization.trim() || !pat.trim()}
         onClick={() => connect.mutate()}
       >

@@ -19,6 +19,7 @@ import {
   textHeaderLabel,
   textPrimary,
 } from './constants'
+import { PULL_REQUEST_STATUS_FILTERS } from './pullRequestStatusFilterModel'
 
 type PullRequestStatusFilterOption = {
   value: PullRequestStatusFilter
@@ -26,14 +27,27 @@ type PullRequestStatusFilterOption = {
   icon?: IconSvgElement
 }
 
-export const pullRequestStatusFilterOptions: readonly PullRequestStatusFilterOption[] = [
-  { value: 'open', label: 'Open', icon: GitPullRequestIcon },
-  { value: 'closed', label: 'Closed', icon: GitPullRequestClosedIcon },
-  { value: 'merged', label: 'Merged', icon: GitMergeIcon },
-  { value: 'draft', label: 'Draft', icon: GitPullRequestDraftIcon },
-]
+const statusIcons: Record<PullRequestStatusFilter, IconSvgElement> = {
+  open: GitPullRequestIcon,
+  closed: GitPullRequestClosedIcon,
+  merged: GitMergeIcon,
+  draft: GitPullRequestDraftIcon,
+}
 
-export const defaultPullRequestStatusFilters = pullRequestStatusFilterOptions.map((option) => option.value)
+const statusLabels: Record<PullRequestStatusFilter, string> = {
+  open: 'Open',
+  closed: 'Closed',
+  merged: 'Merged',
+  draft: 'Draft',
+}
+
+const pullRequestStatusFilterOptions: readonly PullRequestStatusFilterOption[] = PULL_REQUEST_STATUS_FILTERS.map(
+  (value) => ({
+    value,
+    label: statusLabels[value],
+    icon: statusIcons[value],
+  }),
+)
 
 type SidenavPullRequestFilterMenuProps = {
   rootRef: RefObject<HTMLDivElement>

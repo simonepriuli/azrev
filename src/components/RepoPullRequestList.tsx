@@ -1,7 +1,14 @@
+import { useQueries } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import type { GitPullRequest } from '../lib/adoTypes'
 import { formatRelativeShort } from '../lib/formatRelativeShort'
-import { usePullRequests } from '../queries/adoQueries'
+import { isAssignedReviewer } from '../lib/pullRequestReviewerIdentity'
+import {
+  fetchPullRequestReviewers,
+  pullRequestReviewersQueryKey,
+  useCurrentAdoReviewerIdentities,
+  usePullRequests,
+} from '../queries/adoQueries'
 
 const VISIBLE_PR_COUNT = 5
 
@@ -56,6 +63,7 @@ export function RepoPullRequestList({
   onSelectPullRequest,
 }: Props) {
   const prs = usePullRequests(organization, projectName, repositoryId, { enabled: expanded })
+  const currentReviewerIdentities = useCurrentAdoReviewerIdentities(expanded ? organization : undefined)
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
@@ -80,6 +88,24 @@ export function RepoPullRequestList({
     return filtered.slice(0, VISIBLE_PR_COUNT)
   }, [filtered, showAll])
 
+  const reviewerBackdropQueries = useQueries({
+    queries: visible.map((prItem) => ({
+      queryKey: pullRequestReviewersQueryKey(organization, projectName, repositoryId, prItem.pullRequestId),
+      queryFn: () =>
+        fetchPullRequestReviewers(
+          organization,
+          projectName,
+          repositoryId,
+          prItem.pullRequestId,
+        ),
+      enabled:
+        expanded &&
+        Boolean(organization && projectName && repositoryId) &&
+        currentReviewerIdentities.identities.length > 0,
+      staleTime: 30_000,
+    })),
+  })
+
   const hasMore = filtered.length > VISIBLE_PR_COUNT
 
   if (!expanded) {
@@ -100,9 +126,17 @@ export function RepoPullRequestList({
         <li className="py-1 text-xs text-slate-500">No pull requests matching filter.</li>
       ) : (
         <>
-          {visible.map((prItem) => {
+          {visible.map((prItem, index) => {
             const rel = formatRelativeShort(prItem.creationDate)
             const selected = selectedPullRequestId === prItem.pullRequestId
+            const fetchResult = reviewerBackdropQueries[index]
+            const fetched = fetchResult?.data
+            const resolvedReviewers =
+              fetched != null && fetched.length > 0 ? fetched : (prItem.reviewers ?? [])
+            const showReviewerDot = isAssignedReviewer(
+              resolvedReviewers,
+              currentReviewerIdentities.identities,
+            )
             return (
               <li key={prItem.pullRequestId}>
                 <button
@@ -111,7 +145,20 @@ export function RepoPullRequestList({
                     selected ? 'bg-slate-900/10 text-slate-900' : 'text-slate-700'
                   }`}
                   onClick={() => onSelectPullRequest(prItem.pullRequestId)}
+                  aria-label={
+                    showReviewerDot
+                      ? `Pull request !${prItem.pullRequestId}: ${prItem.title}. Assigned to you for review.`
+                      : undefined
+                  }
                 >
+                  <span
+                    className="flex w-4 shrink-0 justify-center pt-1"
+                    title={showReviewerDot ? 'Assigned to you for review' : undefined}
+                  >
+                    {showReviewerDot ? (
+                      <span className="h-2 w-2 rounded-full bg-blue-600" aria-hidden />
+                    ) : null}
+                  </span>
                   <span className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-[10px] text-slate-400">!{prItem.pullRequestId}</span>{' '}
                     <span className="font-medium">{prItem.title}</span>

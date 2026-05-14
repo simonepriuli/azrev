@@ -6,6 +6,7 @@ export type AdoRequestPayload = {
   method?: string
   body?: unknown
   accept?: string
+  service?: 'dev' | 'vssps'
 }
 
 export type AdoResponse =

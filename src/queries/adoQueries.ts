@@ -1,10 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
-import { adoGetJson, adoGetText } from '../lib/ado'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { adoGetJson, adoGetText, adoPatchJson, adoPutJson } from '../lib/ado'
 import type {
+  AdoConnectionData,
+  AdoIdentityRef,
   GitPullRequest,
   GitPullRequestChangeEntry,
   GitPullRequestDetail,
   GitPullRequestIteration,
+  GitPullRequestReviewer,
   GitRepository,
   PagedResult,
   TeamProjectReference,
@@ -14,6 +18,39 @@ export const authStatusQueryKey = ['auth', 'status'] as const
 
 const MAX_INLINE_DIFF_CHARS = 1_000_000
 const MAX_INLINE_DIFF_LINES = 20_000
+
+type PullRequestReviewersResponse =
+  | GitPullRequestReviewer[]
+  | PagedResult<GitPullRequestReviewer>
+
+function normalizePullRequestReviewersResponse(
+  response: PullRequestReviewersResponse,
+): GitPullRequestReviewer[] {
+  if (Array.isArray(response)) return response
+  return response.value
+}
+
+export function pullRequestReviewersQueryKey(
+  organization: string | undefined,
+  projectName: string | undefined,
+  repositoryId: string | undefined,
+  pullRequestId: number | undefined,
+) {
+  return ['ado', 'prReviewers', organization, projectName, repositoryId, pullRequestId] as const
+}
+
+export async function fetchPullRequestReviewers(
+  organization: string,
+  projectName: string,
+  repositoryId: string,
+  pullRequestId: number,
+): Promise<GitPullRequestReviewer[]> {
+  const response = await adoGetJson<PullRequestReviewersResponse>(
+    organization,
+    `${projectName}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/pullrequests/${pullRequestId}/reviewers`,
+  )
+  return normalizePullRequestReviewersResponse(response)
+}
 
 export function useAuthStatus() {
   return useQuery({
@@ -25,6 +62,172 @@ export function useAuthStatus() {
       return window.azrev.auth.getStatus()
     },
     staleTime: 30_000,
+  })
+}
+
+export function useAdoAuthenticatedUser(organization: string | undefined) {
+  return useQuery({
+    queryKey: ['ado', 'connectionData', organization],
+    queryFn: () =>
+      adoGetJson<AdoConnectionData>(
+        organization!,
+        `_apis/connectionData?api-version=7.2-preview.1`,
+      ),
+    enabled: Boolean(organization),
+    staleTime: 300_000,
+  })
+}
+
+function identityMembershipLookupPath(identities: readonly AdoIdentityRef[]) {
+  const searchParams = new URLSearchParams()
+  const identityIds = identities.map((identity) => identity.id).filter((id): id is string => Boolean(id))
+  const descriptors = identities
+    .map((identity) => identity.descriptor)
+    .filter((descriptor): descriptor is string => Boolean(descriptor))
+  const subjectDescriptors = identities
+    .map((identity) => identity.subjectDescriptor)
+    .filter((descriptor): descriptor is string => Boolean(descriptor))
+
+  if (identityIds.length > 0) searchParams.set('identityIds', identityIds.join(','))
+  if (descriptors.length > 0) searchParams.set('descriptors', descriptors.join(','))
+  if (subjectDescriptors.length > 0) searchParams.set('subjectDescriptors', subjectDescriptors.join(','))
+  searchParams.set('queryMembership', 'ExpandedUp')
+
+  return `_apis/identities?${searchParams.toString()}`
+}
+
+export function useAdoIdentityMemberships(
+  organization: string | undefined,
+  identities: readonly AdoIdentityRef[],
+) {
+  const identityKey = identities
+    .map((identity) => identity.id ?? identity.descriptor ?? identity.subjectDescriptor ?? identity.uniqueName)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+
+  return useQuery({
+    queryKey: ['ado', 'identityMemberships', organization, identityKey],
+    queryFn: () =>
+      adoGetJson<PagedResult<AdoIdentityRef>>(
+        organization!,
+        identityMembershipLookupPath(identities),
+        { service: 'vssps' },
+      ),
+    enabled: Boolean(organization && identityKey.length > 0),
+    staleTime: 300_000,
+  })
+}
+
+export function useCurrentAdoReviewerIdentities(organization: string | undefined) {
+  const connectionUser = useAdoAuthenticatedUser(organization)
+  const directUserIdentities = useMemo(
+    () =>
+      [
+        connectionUser.data?.authenticatedUser,
+        connectionUser.data?.authorizedUser,
+      ].filter((identity): identity is AdoIdentityRef => identity != null),
+    [connectionUser.data?.authenticatedUser, connectionUser.data?.authorizedUser],
+  )
+  const identityMemberships = useAdoIdentityMemberships(organization, directUserIdentities)
+
+  const identities = useMemo(
+    () => [
+      ...directUserIdentities,
+      ...(identityMemberships.data?.value ?? []).flatMap((identity) => identity.memberOf ?? []),
+    ],
+    [directUserIdentities, identityMemberships.data?.value],
+  )
+
+  const membershipLookupPending =
+    Boolean(organization && directUserIdentities.length > 0) && identityMemberships.isPending
+
+  return {
+    identities,
+    isPending: connectionUser.isPending || membershipLookupPending,
+    userId: connectionUser.data?.authenticatedUser?.id,
+    userUniqueName: connectionUser.data?.authenticatedUser?.uniqueName,
+  }
+}
+
+export type ApprovePullRequestVariables = {
+  organization: string
+  projectName: string
+  repositoryId: string
+  pullRequestId: number
+  reviewerId: string
+}
+
+export function useApprovePullRequestMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: ApprovePullRequestVariables) => {
+      const path = `${vars.projectName}/_apis/git/repositories/${encodeURIComponent(
+        vars.repositoryId,
+      )}/pullrequests/${vars.pullRequestId}/reviewers/${encodeURIComponent(vars.reviewerId)}`
+      return adoPutJson<unknown>(vars.organization, path, {
+        id: vars.reviewerId,
+        vote: 10,
+      })
+    },
+    onSuccess: async (_, vars) => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['ado', 'pr', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
+        }),
+        qc.invalidateQueries({
+          queryKey: ['ado', 'prs', vars.organization, vars.projectName, vars.repositoryId],
+        }),
+        qc.invalidateQueries({
+          queryKey: ['ado', 'prReviewers', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
+        }),
+      ])
+    },
+  })
+}
+
+export type CompletePullRequestVariables = {
+  organization: string
+  projectName: string
+  repositoryId: string
+  pullRequestId: number
+  sourceCommitId: string
+  prTitle: string
+}
+
+export function useCompletePullRequestMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: CompletePullRequestVariables) => {
+      const path = `${vars.projectName}/_apis/git/repositories/${encodeURIComponent(
+        vars.repositoryId,
+      )}/pullrequests/${vars.pullRequestId}`
+      const body = {
+        status: 'completed',
+        lastMergeSourceCommit: { commitId: vars.sourceCommitId },
+        completionOptions: {
+          deleteSourceBranch: false,
+          mergeCommitMessage: `Merged PR !${vars.pullRequestId}: ${vars.prTitle}`.trim(),
+          mergeStrategy: 'noFastForward',
+        },
+      }
+      return adoPatchJson<GitPullRequestDetail>(vars.organization, path, body)
+    },
+    onSuccess: async (_, vars) => {
+      await Promise.all([
+        qc.invalidateQueries({
+          queryKey: ['ado', 'pr', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
+        }),
+        qc.invalidateQueries({
+          queryKey: ['ado', 'prs', vars.organization, vars.projectName, vars.repositoryId],
+        }),
+        qc.invalidateQueries({
+          queryKey: ['ado', 'prIterations', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
+        }),
+        qc.invalidateQueries({
+          queryKey: ['ado', 'prReviewers', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
+        }),
+      ])
+    },
   })
 }
 
@@ -83,6 +286,26 @@ export function usePullRequest(
         `${projectName!}/_apis/git/repositories/${repositoryId!}/pullrequests/${pullRequestId!}`,
       ),
     enabled: Boolean(organization && projectName && repositoryId && pullRequestId != null),
+  })
+}
+
+export function usePullRequestReviewers(
+  organization: string | undefined,
+  projectName: string | undefined,
+  repositoryId: string | undefined,
+  pullRequestId: number | undefined,
+) {
+  return useQuery({
+    queryKey: pullRequestReviewersQueryKey(organization, projectName, repositoryId, pullRequestId),
+    queryFn: () =>
+      fetchPullRequestReviewers(
+        organization!,
+        projectName!,
+        repositoryId!,
+        pullRequestId!,
+      ),
+    enabled: Boolean(organization && projectName && repositoryId && pullRequestId != null),
+    staleTime: 30_000,
   })
 }
 
