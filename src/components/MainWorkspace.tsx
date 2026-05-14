@@ -1,21 +1,5 @@
-import {
-  AlertCircleIcon,
-  FilterMailIcon,
-  Folder01Icon,
-  FolderOpenIcon,
-  GitMergeIcon,
-  GitPullRequestClosedIcon,
-  GitPullRequestDraftIcon,
-  GitPullRequestIcon,
-  LayoutAlignLeftIcon,
-  PanelLeftIcon,
-  Tick01Icon,
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
-import type { IconSvgElement } from '@hugeicons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readStoredProjectId, writeStoredProjectId } from '../lib/selectedProjectStorage'
 import {
@@ -29,274 +13,15 @@ import {
   useRepositories,
   useSelectedFileDiff,
   filterDiffableChanges,
-  normalizeChangeType,
 } from '../queries/adoQueries'
 import { useNavStore } from '../store/navStore'
-import { FileDiffPane } from './FileDiffPane'
-import { RepoPullRequestList, type PullRequestStatusFilter } from './RepoPullRequestList'
-import { SidenavAccountMenu } from './SidenavAccountMenu'
-
-const isMacUA =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
-
-const electronMacVibrancy =
-  typeof window !== 'undefined' && window.azrev?.nativeVibrancyEnabled === true
-
-const popoverSurface =
-  'rounded-2xl border border-[#EEEEEE] bg-white shadow-[0_4px_24px_rgba(0,0,0,0.08)]'
-const textPrimary = 'text-[#1A1A1A]'
-const textHeaderLabel = 'text-[#A9A9AA]'
-const rowHover = 'rounded-lg hover:bg-slate-900/5'
-const panelRow = 'flex h-8 min-h-8 max-h-8 w-full shrink-0 items-center gap-3 px-3'
-const iconPrimary = 'text-[#1A1A1A]'
-const iconMuted = 'text-[#737373]'
-const mainSidebarToggleDelayMs = 120
-
-type PullRequestStatusPresentation = {
-  icon: IconSvgElement
-  label: string
-  className: string
-}
-
-type PullRequestStatusFilterOption = {
-  value: PullRequestStatusFilter
-  label: string
-  icon?: IconSvgElement
-}
-
-type SidebarToggleButtonProps = {
-  expanded: boolean
-  className?: string
-  tabIndex?: number
-  onClick: () => void
-}
-
-type ApplicationHeaderProps = {
-  reserveSidebarToggleSpace: boolean
-  showSidebarToggle: boolean
-  sidebarToggleClassName?: string
-  pullRequestId: number
-  title: string
-  status: PullRequestStatusPresentation
-  onToggleSidebar: () => void
-}
-
-const pullRequestStatusFilterOptions: readonly PullRequestStatusFilterOption[] = [
-  { value: 'open', label: 'Open', icon: GitPullRequestIcon },
-  { value: 'closed', label: 'Closed', icon: GitPullRequestClosedIcon },
-  { value: 'merged', label: 'Merged', icon: GitMergeIcon },
-  { value: 'draft', label: 'Draft', icon: GitPullRequestDraftIcon },
-]
-const defaultPullRequestStatusFilters = pullRequestStatusFilterOptions.map((option) => option.value)
-
-function SidebarToggleButton({ expanded, className = '', tabIndex, onClick }: SidebarToggleButtonProps) {
-  return (
-    <button
-      type="button"
-      aria-label={expanded ? 'Close sidebar' : 'Open sidebar'}
-      aria-expanded={expanded}
-      tabIndex={tabIndex}
-      className={`app-region-no-drag flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-900/5 hover:text-slate-800 ${className}`}
-      onClick={onClick}
-    >
-      <HugeiconsIcon
-        icon={expanded ? LayoutAlignLeftIcon : PanelLeftIcon}
-        size={16}
-        strokeWidth={1.7}
-        aria-hidden
-      />
-    </button>
-  )
-}
-
-function ApplicationHeader({
-  reserveSidebarToggleSpace,
-  showSidebarToggle,
-  sidebarToggleClassName = '',
-  pullRequestId,
-  title,
-  status,
-  onToggleSidebar,
-}: ApplicationHeaderProps) {
-  return (
-    <div className="flex min-w-0 items-center">
-      <div
-        className={`shrink-0 overflow-hidden transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-          reserveSidebarToggleSpace ? sidebarToggleClassName : 'w-0'
-        }`}
-      >
-        <SidebarToggleButton
-          expanded={false}
-          tabIndex={showSidebarToggle ? undefined : -1}
-          className={`shrink-0 transition-opacity duration-200 ${
-            showSidebarToggle ? 'opacity-100' : 'pointer-events-none opacity-0'
-          }`}
-          onClick={onToggleSidebar}
-        />
-      </div>
-
-      <h2 className="flex min-w-0 items-center gap-2 text-base font-medium text-slate-900">
-        <span
-          className={`inline-flex shrink-0 items-center gap-1.5 align-middle font-mono ${status.className}`}
-          title={`Pull request status: ${status.label}`}
-        >
-          <HugeiconsIcon
-            icon={status.icon}
-            size={18}
-            strokeWidth={1.7}
-            aria-label={`Pull request ${status.label}`}
-          />
-          !{pullRequestId}
-        </span>
-        <span className="min-w-0 truncate">{title}</span>
-      </h2>
-    </div>
-  )
-}
-
-type SidenavPullRequestFilterMenuProps = {
-  rootRef: RefObject<HTMLDivElement>
-  open: boolean
-  statusFilters: readonly PullRequestStatusFilter[]
-  onToggleOpen: () => void
-  onStatusFiltersChange: (statusFilters: PullRequestStatusFilter[]) => void
-}
-
-function SidenavPullRequestFilterMenu({
-  rootRef,
-  open,
-  statusFilters,
-  onToggleOpen,
-  onStatusFiltersChange,
-}: SidenavPullRequestFilterMenuProps) {
-  const toggleStatusFilter = (statusFilter: PullRequestStatusFilter) => {
-    if (statusFilters.includes(statusFilter)) {
-      onStatusFiltersChange(statusFilters.filter((value) => value !== statusFilter))
-      return
-    }
-    onStatusFiltersChange([...statusFilters, statusFilter])
-  }
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-label="Filter pull requests"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900/5 hover:text-slate-800"
-        onClick={onToggleOpen}
-      >
-        <HugeiconsIcon icon={FilterMailIcon} size={15} strokeWidth={1.6} aria-hidden />
-      </button>
-
-      {open ? (
-        <div
-          role="dialog"
-          aria-label="Pull request filters"
-          className={`absolute right-0 top-full z-30 mt-1 w-56 overflow-hidden ${popoverSurface}`}
-        >
-          <div className="flex flex-col px-2 pb-2 pt-2">
-            <div className={`${panelRow} text-xs font-medium ${textHeaderLabel}`}>
-              <span className="min-w-0 truncate">Status</span>
-            </div>
-
-            <div role="menu" aria-label="Status filters">
-              {pullRequestStatusFilterOptions.map((option) => {
-                const selected = statusFilters.includes(option.value)
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemcheckbox"
-                    aria-checked={selected}
-                    className={`${panelRow} rounded-lg text-left text-xs font-normal ${textPrimary} ${rowHover}`}
-                    onClick={() => toggleStatusFilter(option.value)}
-                  >
-                    {option.icon ? (
-                      <HugeiconsIcon
-                        icon={option.icon}
-                        size={15}
-                        strokeWidth={1.5}
-                        className={`shrink-0 ${iconMuted}`}
-                        aria-hidden
-                      />
-                    ) : null}
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                    <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
-                      {selected ? (
-                        <HugeiconsIcon
-                          icon={Tick01Icon}
-                          size={14}
-                          strokeWidth={1.75}
-                          className={iconPrimary}
-                          aria-hidden
-                        />
-                      ) : null}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-function formatPullRequestStatus(status: string) {
-  return status
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[-_]/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-}
-
-function getPullRequestStatusPresentation(status: string): PullRequestStatusPresentation {
-  const normalizedStatus = status.trim().toLowerCase()
-
-  switch (normalizedStatus) {
-    case 'active':
-    case 'open':
-      return {
-        icon: GitPullRequestIcon,
-        label: 'Open',
-        className: 'text-cyan-700',
-      }
-    case 'abandoned':
-    case 'closed':
-      return {
-        icon: GitPullRequestClosedIcon,
-        label: 'Closed',
-        className: 'text-slate-500',
-      }
-    case 'completed':
-    case 'merged':
-      return {
-        icon: GitMergeIcon,
-        label: 'Merged',
-        className: 'text-emerald-700',
-      }
-    case 'draft':
-      return {
-        icon: GitPullRequestDraftIcon,
-        label: 'Draft',
-        className: 'text-violet-700',
-      }
-    default:
-      return {
-        icon: AlertCircleIcon,
-        label: formatPullRequestStatus(status) || 'Unknown',
-        className: 'text-amber-700',
-      }
-  }
-}
-
-function formatBranchRef(refName: string | null | undefined) {
-  return refName?.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, '') ?? 'Unknown branch'
-}
+import { electronMacVibrancy, isMacUA, mainSidebarToggleDelayMs } from './main-workspace/constants'
+import { defaultPullRequestStatusFilters } from './main-workspace/SidenavPullRequestFilterMenu'
+import { getPullRequestStatusPresentation } from './main-workspace/pullRequestStatusPresentation'
+import { MainWorkspaceNoPrSelected } from './main-workspace/MainWorkspaceNoPrSelected'
+import { MainWorkspaceSidebar } from './main-workspace/MainWorkspaceSidebar'
+import type { PullRequestStatusFilter } from './RepoPullRequestList'
+import { PullRequestReviewWorkspace } from './main-workspace/PullRequestReviewWorkspace'
 
 export function MainWorkspace() {
   const qc = useQueryClient()
@@ -475,10 +200,8 @@ export function MainWorkspace() {
     },
   })
 
-  const entries = filterDiffableChanges(changes.data?.changeEntries)
-  const pullRequestStatus = pr.data
-    ? getPullRequestStatusPresentation(pr.data.status)
-    : null
+  const changeEntries = filterDiffableChanges(changes.data?.changeEntries)
+  const pullRequestStatus = pr.data ? getPullRequestStatusPresentation(pr.data.status) : null
 
   const toggleRepoExpanded = (id: string) => {
     setExpandedRepoIds((prev) => {
@@ -498,249 +221,55 @@ export function MainWorkspace() {
       }`}
     >
       <div className="flex min-h-0 flex-1">
-        <aside
-          ref={sidebarRef}
-          aria-hidden={!sidebarOpen}
-          className={`flex shrink-0 overflow-hidden border-r transition-[width,border-color] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] ${
-            sidebarOpen ? 'w-[280px] border-slate-200/90' : 'w-0 border-transparent'
-          } ${
-            electronMacVibrancy
-              ? 'sidebar-translucent'
-              : 'bg-white/55 backdrop-blur-xl backdrop-saturate-150'
-          }`}
-        >
-          <div
-            className={`flex w-[280px] shrink-0 flex-col transition-[opacity,transform] duration-200 ease-out ${
-              sidebarOpen
-                ? 'translate-x-0 opacity-100 delay-100'
-                : 'pointer-events-none -translate-x-4 opacity-0'
-            }`}
-          >
-            <div className={`app-region-drag flex h-11 shrink-0 items-center px-3 ${isMac ? 'pl-[76px]' : ''}`}>
-              <SidebarToggleButton expanded={true} onClick={toggleSidebar} />
-            </div>
-
-            <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto px-2 py-2">
-              <div className="relative mb-1 flex items-center justify-between px-1">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Repositories</div>
-                <SidenavPullRequestFilterMenu
-                  rootRef={statusFilterRef}
-                  open={statusFilterOpen}
-                  statusFilters={pullRequestStatusFilters}
-                  onToggleOpen={() => setStatusFilterOpen((v) => !v)}
-                  onStatusFiltersChange={setPullRequestStatusFilters}
-                />
-              </div>
-              {!projectName ? (
-                <p className="mt-2 px-1 text-xs text-slate-500">Choose a project in Settings below.</p>
-              ) : repos.isLoading ? (
-                <p className="mt-2 px-1 text-xs text-slate-500">Loading repositories…</p>
-              ) : repos.error ? (
-                <p className="mt-2 px-1 text-xs text-red-600">
-                  {repos.error instanceof Error ? repos.error.message : 'Failed to load repositories'}
-                </p>
-              ) : (
-                <ul className="mt-1 space-y-0.5">
-                  {(repos.data?.value ?? []).map((r) => {
-                    const expanded = expandedRepoIds.has(r.id)
-                    return (
-                      <li key={r.id} className="rounded-lg">
-                        <div className="rounded-lg">
-                          <button
-                            type="button"
-                            aria-expanded={expanded}
-                            className="app-region-no-drag flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-900/5"
-                            onClick={() => toggleRepoExpanded(r.id)}
-                          >
-                            <HugeiconsIcon
-                              icon={expanded ? FolderOpenIcon : Folder01Icon}
-                              size={14}
-                              strokeWidth={1.5}
-                              className="shrink-0 text-slate-500"
-                              aria-hidden
-                            />
-                            <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                          </button>
-                        </div>
-                        {organization && projectName ? (
-                          <RepoPullRequestList
-                            key={r.id}
-                            organization={organization}
-                            projectName={projectName}
-                            repositoryId={r.id}
-                            expanded={expanded}
-                            statusFilters={pullRequestStatusFilters}
-                            selectedPullRequestId={repositoryId === r.id ? pullRequestId : null}
-                            onSelectPullRequest={(id) => selectPullRequestInRepository(r.id, r.name, id)}
-                          />
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-
-            <SidenavAccountMenu
-              organization={organization}
-              projects={projects.data?.value ?? []}
-              projectsLoading={projects.isLoading}
-              projectsError={projects.error instanceof Error ? projects.error : null}
-              projectId={projectId}
-              setProject={setProject}
-              onSignOut={() => disconnect.mutate()}
-              signOutPending={disconnect.isPending}
-            />
-          </div>
-        </aside>
+        <MainWorkspaceSidebar
+          sidebarRef={sidebarRef}
+          sidebarOpen={sidebarOpen}
+          isMac={isMac}
+          onToggleSidebar={toggleSidebar}
+          statusFilterRef={statusFilterRef}
+          statusFilterOpen={statusFilterOpen}
+          onToggleStatusFilterOpen={() => setStatusFilterOpen((v) => !v)}
+          pullRequestStatusFilters={pullRequestStatusFilters}
+          onPullRequestStatusFiltersChange={setPullRequestStatusFilters}
+          projectName={projectName}
+          organization={organization}
+          repos={repos}
+          expandedRepoIds={expandedRepoIds}
+          onToggleRepoExpanded={toggleRepoExpanded}
+          repositoryId={repositoryId}
+          pullRequestId={pullRequestId}
+          onSelectPullRequestInRepository={selectPullRequestInRepository}
+          projects={projects}
+          projectId={projectId}
+          onSetProject={setProject}
+          onSignOut={() => disconnect.mutate()}
+          signOutPending={disconnect.isPending}
+        />
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-white">
           {!pullRequestId ? (
-            <div className="app-region-drag flex flex-1 flex-col">
-              {showMainSidebarToggle ? (
-                <div className="flex h-11 shrink-0 items-center px-5">
-                  <SidebarToggleButton
-                    expanded={false}
-                    className={`transition-opacity duration-200 ${isMac ? 'ml-14' : ''}`}
-                    onClick={toggleSidebar}
-                  />
-                </div>
-              ) : null}
-              <div className="flex flex-1 items-center justify-center p-8">
-                <p className="app-region-no-drag text-sm text-slate-500">Select a pull request to review.</p>
-              </div>
-            </div>
+            <MainWorkspaceNoPrSelected
+              showMainSidebarToggle={showMainSidebarToggle}
+              isMac={isMac}
+              onToggleSidebar={toggleSidebar}
+            />
           ) : (
-            <>
-              <div className="app-region-drag shrink-0 border-b border-slate-200 px-5 pb-3 pt-2">
-                {pr.isLoading ? (
-                  <div className="flex items-start gap-3">
-                    {showMainSidebarToggle ? (
-                      <SidebarToggleButton
-                        expanded={false}
-                        className={`shrink-0 transition-opacity duration-200 ${isMac ? 'ml-14' : ''}`}
-                        onClick={toggleSidebar}
-                      />
-                    ) : null}
-                    <p className="text-sm text-slate-500">Loading pull request…</p>
-                  </div>
-                ) : pr.data && pullRequestStatus ? (
-                  <div className="min-w-0">
-                    <ApplicationHeader
-                      reserveSidebarToggleSpace={!sidebarOpen}
-                      showSidebarToggle={showMainSidebarToggle}
-                      sidebarToggleClassName={isMac ? 'w-24 pl-14' : 'w-10'}
-                      pullRequestId={pr.data.pullRequestId}
-                      title={pr.data.title}
-                      status={pullRequestStatus}
-                      onToggleSidebar={toggleSidebar}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      {pullRequestStatus.label}
-                      {pr.data.createdBy?.displayName ? ` · ${pr.data.createdBy.displayName}` : ''}
-                      {iterationId != null ? ` · iteration ${iterationId}` : ''}
-                    </p>
-                    {repositoryName ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span className="font-mono text-slate-400">{repositoryName}</span>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            from
-                          </span>
-                          <span className="font-mono text-slate-700" title={pr.data.sourceRefName ?? undefined}>
-                            {formatBranchRef(pr.data.sourceRefName)}
-                          </span>
-                        </span>
-                        <span className="text-slate-300" aria-hidden>
-                          →
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                            into
-                          </span>
-                          <span className="font-mono text-slate-700" title={pr.data.targetRefName ?? undefined}>
-                            {formatBranchRef(pr.data.targetRefName)}
-                          </span>
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex min-h-0 flex-1">
-                <div className="app-region-drag flex w-96 shrink-0 min-h-0 flex-col border-r border-slate-200 bg-white">
-                  <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto px-3 py-3">
-                    <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Files</div>
-                    {changes.isLoading ? (
-                      <p className="text-sm text-slate-500">Loading changes…</p>
-                    ) : entries.length === 0 ? (
-                      <p className="text-sm text-slate-500">No file changes in this iteration.</p>
-                    ) : (
-                      <ul className="space-y-px">
-                        {entries.map((e) => {
-                          const path = e.item?.path ?? ''
-                          const t = normalizeChangeType(e.changeType)
-                          const isSelected = selectedChangePath === path
-                          const displayPath = path.replace(/^\//, '')
-                          return (
-                            <li key={`${path}-${String(e.changeType)}`}>
-                              <button
-                                type="button"
-                                title={displayPath}
-                                className={`group flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs transition-colors ${
-                                  isSelected
-                                    ? 'bg-slate-100 text-slate-950'
-                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950'
-                                }`}
-                                onClick={() => setSelectedChangePath(path)}
-                              >
-                                <span
-                                  className={`w-9 shrink-0 text-[11px] ${
-                                    isSelected ? 'text-cyan-700' : 'text-slate-400 group-hover:text-slate-500'
-                                  }`}
-                                >
-                                  {t}
-                                </span>
-                                <span className="min-w-0 flex-1 truncate">{displayPath}</span>
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-                <div className="app-region-drag flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50">
-                  <div className="app-region-no-drag flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    {!selectedChangePath ? (
-                      <p className="flex flex-1 items-center justify-center text-sm text-slate-500">
-                        Select a file to view its diff.
-                      </p>
-                    ) : fileDiff.isLoading ? (
-                      <p className="text-sm text-slate-500">Loading file contents…</p>
-                    ) : fileDiff.error ? (
-                      <p className="text-sm text-red-600">
-                        {fileDiff.error instanceof Error ? fileDiff.error.message : 'Failed to load diff'}
-                      </p>
-                    ) : fileDiff.data?.kind === 'binary' ? (
-                      <p className="text-sm text-slate-600">
-                        Binary or non-text file — diff view is only available for text files.
-                      </p>
-                    ) : fileDiff.data?.kind === 'too-large' ? (
-                      <p className="text-sm text-slate-600">
-                        This file is too large to display safely in the inline diff viewer.
-                      </p>
-                    ) : fileDiff.data?.kind === 'text' ? (
-                      <FileDiffPane
-                        displayPath={fileDiff.data.displayPath}
-                        oldText={fileDiff.data.oldText}
-                        newText={fileDiff.data.newText}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </>
+            <PullRequestReviewWorkspace
+              showMainSidebarToggle={showMainSidebarToggle}
+              isMac={isMac}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={toggleSidebar}
+              prLoading={pr.isLoading}
+              prDetail={pr.data}
+              pullRequestStatus={pullRequestStatus}
+              iterationId={iterationId}
+              repositoryName={repositoryName}
+              changesLoading={changes.isLoading}
+              changeEntries={changeEntries}
+              selectedChangePath={selectedChangePath}
+              onSelectChangePath={setSelectedChangePath}
+              fileDiff={fileDiff}
+            />
           )}
         </main>
       </div>
