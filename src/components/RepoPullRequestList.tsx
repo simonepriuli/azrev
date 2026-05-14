@@ -1,9 +1,31 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { GitPullRequest } from '../lib/adoTypes'
 import { formatRelativeShort } from '../lib/formatRelativeShort'
 import { usePullRequests } from '../queries/adoQueries'
 
 const VISIBLE_PR_COUNT = 5
+
+export type PullRequestStatusFilter = 'open' | 'closed' | 'merged' | 'draft'
+
+function getPullRequestStatusFilter(status: string): PullRequestStatusFilter | 'other' {
+  const normalizedStatus = status.trim().toLowerCase()
+
+  switch (normalizedStatus) {
+    case 'active':
+    case 'open':
+      return 'open'
+    case 'abandoned':
+    case 'closed':
+      return 'closed'
+    case 'completed':
+    case 'merged':
+      return 'merged'
+    case 'draft':
+      return 'draft'
+    default:
+      return 'other'
+  }
+}
 
 function sortPullRequestsByRecency(items: GitPullRequest[]) {
   return [...items].sort((a, b) => {
@@ -19,6 +41,7 @@ type Props = {
   projectName: string
   repositoryId: string
   expanded: boolean
+  statusFilters: readonly PullRequestStatusFilter[]
   selectedPullRequestId: number | null
   onSelectPullRequest: (pullRequestId: number) => void
 }
@@ -28,23 +51,36 @@ export function RepoPullRequestList({
   projectName,
   repositoryId,
   expanded,
+  statusFilters,
   selectedPullRequestId,
   onSelectPullRequest,
 }: Props) {
   const prs = usePullRequests(organization, projectName, repositoryId, { enabled: expanded })
   const [showAll, setShowAll] = useState(false)
 
+  useEffect(() => {
+    setShowAll(false)
+  }, [statusFilters])
+
   const sorted = useMemo(
     () => sortPullRequestsByRecency(prs.data?.value ?? []),
     [prs.data?.value],
   )
 
-  const visible = useMemo(() => {
-    if (showAll || sorted.length <= VISIBLE_PR_COUNT) return sorted
-    return sorted.slice(0, VISIBLE_PR_COUNT)
-  }, [showAll, sorted])
+  const filtered = useMemo(() => {
+    const selectedStatuses = new Set(statusFilters)
+    return sorted.filter((prItem) => {
+      const status = getPullRequestStatusFilter(prItem.status)
+      return status !== 'other' && selectedStatuses.has(status)
+    })
+  }, [sorted, statusFilters])
 
-  const hasMore = sorted.length > VISIBLE_PR_COUNT
+  const visible = useMemo(() => {
+    if (showAll || filtered.length <= VISIBLE_PR_COUNT) return filtered
+    return filtered.slice(0, VISIBLE_PR_COUNT)
+  }, [filtered, showAll])
+
+  const hasMore = filtered.length > VISIBLE_PR_COUNT
 
   if (!expanded) {
     return null
@@ -60,6 +96,8 @@ export function RepoPullRequestList({
         </li>
       ) : sorted.length === 0 ? (
         <li className="py-1 text-xs text-slate-500">No pull requests.</li>
+      ) : filtered.length === 0 ? (
+        <li className="py-1 text-xs text-slate-500">No pull requests matching filter.</li>
       ) : (
         <>
           {visible.map((prItem) => {
@@ -94,7 +132,7 @@ export function RepoPullRequestList({
                 className="app-region-no-drag w-full rounded-md px-2 py-1 text-left text-[11px] font-medium text-slate-500 hover:bg-slate-900/5 hover:text-slate-800"
                 onClick={() => setShowAll((v) => !v)}
               >
-                {showAll ? 'Show less' : `Show more (${sorted.length - VISIBLE_PR_COUNT})`}
+                {showAll ? 'Show less' : `Show more (${filtered.length - VISIBLE_PR_COUNT})`}
               </button>
             </li>
           ) : null}
