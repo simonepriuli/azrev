@@ -28,6 +28,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST
 
+const APP_ICON_PATH = path.join(process.env.VITE_PUBLIC, 'icon.png')
+
 const AUTH_FILE = () => path.join(app.getPath('userData'), 'pat.enc')
 const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'settings.json')
 
@@ -185,7 +187,7 @@ function createWindow() {
     width: 1280,
     height: 800,
     backgroundColor: nativeVibrancyEnabled ? '#00000000' : '#f8fafc',
-    icon: path.join(process.env.VITE_PUBLIC!, 'electron-vite.svg'),
+    icon: APP_ICON_PATH,
     ...(isDarwin
       ? {
           titleBarStyle: 'hiddenInset' as const,
@@ -349,5 +351,8 @@ ipcMain.handle(
 )
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(APP_ICON_PATH)
+  }
   createWindow()
 })

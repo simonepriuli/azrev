@@ -12,10 +12,12 @@
     "dist-electron"
   ],
   "mac": {
+    "icon": "build/icon.icon",
     "target": ["dmg"],
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
+    "icon": "build/icon.ico",
     "target": [{ "target": "nsis", "arch": ["x64"] }],
     "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
   },
@@ -26,6 +28,7 @@
     "deleteAppDataOnUninstall": false
   },
   "linux": {
+    "icon": "build/icon.png",
     "target": ["AppImage"],
     "artifactName": "${productName}-Linux-${version}.${ext}"
   }
