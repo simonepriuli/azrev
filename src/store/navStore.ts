@@ -10,6 +10,7 @@ export type NavStore = {
   setProject: (id: string, name: string) => void
   setRepository: (id: string, name: string) => void
   setPullRequest: (id: number | null) => void
+  selectPullRequestInRepository: (repositoryId: string, repositoryName: string, pullRequestId: number) => void
   setSelectedChangePath: (path: string | null) => void
   resetBelowProject: () => void
   resetBelowRepository: () => void
@@ -41,6 +42,13 @@ export const useNavStore = create<NavStore>((set) => ({
   setPullRequest: (id) =>
     set({
       pullRequestId: id,
+      selectedChangePath: null,
+    }),
+  selectPullRequestInRepository: (repositoryId, repositoryName, pullRequestId) =>
+    set({
+      repositoryId,
+      repositoryName,
+      pullRequestId,
       selectedChangePath: null,
     }),
   setSelectedChangePath: (path) => set({ selectedChangePath: path }),

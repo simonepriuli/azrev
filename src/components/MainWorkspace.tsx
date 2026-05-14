@@ -1,5 +1,8 @@
+import { Folder01Icon, FolderOpenIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { readStoredProjectId, writeStoredProjectId } from '../lib/selectedProjectStorage'
 import {
   useAuthStatus,
   useIterationChanges,
@@ -7,7 +10,6 @@ import {
   useLatestIterationId,
   useProjects,
   usePullRequest,
-  usePullRequests,
   useRepositories,
   useSelectedFileDiff,
   filterDiffableChanges,
@@ -15,6 +17,14 @@ import {
 } from '../queries/adoQueries'
 import { useNavStore } from '../store/navStore'
 import { FileDiffPane } from './FileDiffPane'
+import { RepoPullRequestList } from './RepoPullRequestList'
+import { SidenavAccountMenu } from './SidenavAccountMenu'
+
+const isMacUA =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
+
+const electronMacVibrancy =
+  typeof window !== 'undefined' && window.azrev?.platform === 'darwin'
 
 export function MainWorkspace() {
   const qc = useQueryClient()
@@ -29,14 +39,66 @@ export function MainWorkspace() {
     pullRequestId,
     selectedChangePath,
     setProject,
-    setRepository,
-    setPullRequest,
+    selectPullRequestInRepository,
     setSelectedChangePath,
   } = useNavStore()
 
+  const [expandedRepoIds, setExpandedRepoIds] = useState(() => new Set<string>())
+
   const projects = useProjects(organization)
   const repos = useRepositories(organization, projectName ?? undefined)
-  const prs = usePullRequests(organization, projectName ?? undefined, repositoryId ?? undefined)
+
+  const repoIdsFingerprint = useMemo(() => {
+    const v = repos.data?.value ?? []
+    if (v.length === 0) return ''
+    return [...v].map((r) => r.id).sort().join('\0')
+  }, [repos.data?.value])
+
+  const defaultExpandedRepoIds = useMemo(() => {
+    if (!projectName || repoIdsFingerprint === '') return null
+    return new Set(repoIdsFingerprint.split('\0'))
+  }, [projectName, repoIdsFingerprint])
+
+  useEffect(() => {
+    if (defaultExpandedRepoIds == null) {
+      setExpandedRepoIds(new Set())
+      return
+    }
+    setExpandedRepoIds(new Set(defaultExpandedRepoIds))
+  }, [defaultExpandedRepoIds])
+
+  useEffect(() => {
+    if (!repositoryId) return
+    setExpandedRepoIds((prev) => {
+      if (prev.has(repositoryId)) return prev
+      const next = new Set(prev)
+      next.add(repositoryId)
+      return next
+    })
+  }, [repositoryId])
+
+  useEffect(() => {
+    if (!organization || projects.isLoading || projects.error) return
+    const list = projects.data?.value ?? []
+    if (list.length === 0) return
+
+    const byId = new Map(list.map((p) => [p.id, p] as const))
+
+    if (projectId && byId.has(projectId)) {
+      writeStoredProjectId(organization, projectId)
+      return
+    }
+
+    const stored = readStoredProjectId(organization)
+    if (stored && byId.has(stored)) {
+      const p = byId.get(stored)!
+      setProject(p.id, p.name)
+      return
+    }
+
+    const first = list[0]!
+    setProject(first.id, first.name)
+  }, [organization, projects.isLoading, projects.error, projects.data?.value, projectId, setProject])
   const pr = usePullRequest(organization, projectName ?? undefined, repositoryId ?? undefined, pullRequestId ?? undefined)
   const iterationIdQuery = useLatestIterationId(
     organization,
@@ -93,146 +155,122 @@ export function MainWorkspace() {
 
   const entries = filterDiffableChanges(changes.data?.changeEntries)
 
+  const toggleRepoExpanded = (id: string) => {
+    setExpandedRepoIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const isMac = isMacUA && Boolean(window.azrev)
+
   return (
-    <div className="flex h-screen min-h-0 flex-col bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
-        <div className="flex items-baseline gap-3">
-          <span className="text-lg font-semibold tracking-tight text-white">AzRev</span>
-          <span className="text-sm text-slate-400">
-            {organization ? (
-              <>
-                Org <span className="text-slate-200">{organization}</span>
-              </>
-            ) : (
-              'Not connected'
-            )}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="text-sm text-slate-400 hover:text-white"
-          onClick={() => disconnect.mutate()}
-          disabled={disconnect.isPending}
-        >
-          Sign out
-        </button>
-      </header>
+    <div
+      className={`flex h-screen min-h-0 flex-col text-slate-900 ${
+        electronMacVibrancy ? 'bg-transparent' : 'bg-slate-50'
+      }`}
+    >
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-80 shrink-0 flex-col border-r border-slate-800 bg-slate-900/40">
-          <div className="border-b border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Projects
+        <aside
+          className={`flex w-[280px] shrink-0 flex-col border-r border-slate-200/90 ${
+            electronMacVibrancy
+              ? 'sidebar-translucent'
+              : 'bg-white/55 backdrop-blur-xl backdrop-saturate-150'
+          }`}
+        >
+          <div
+            className={`app-region-drag flex h-11 shrink-0 items-center border-b border-slate-200/60 px-3 ${
+              isMac ? 'pl-[76px]' : ''
+            }`}
+          >
+            <span className="truncate text-xs font-semibold tracking-tight text-slate-500">AzRev</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {projects.isLoading ? (
-              <p className="p-3 text-sm text-slate-500">Loading projects…</p>
-            ) : projects.error ? (
-              <p className="p-3 text-sm text-red-400">
-                {projects.error instanceof Error ? projects.error.message : 'Failed to load projects'}
+
+          <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto px-2 py-2">
+            <div className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Repositories</div>
+            {!projectName ? (
+              <p className="mt-2 px-1 text-xs text-slate-500">Choose a project in Settings below.</p>
+            ) : repos.isLoading ? (
+              <p className="mt-2 px-1 text-xs text-slate-500">Loading repositories…</p>
+            ) : repos.error ? (
+              <p className="mt-2 px-1 text-xs text-red-600">
+                {repos.error instanceof Error ? repos.error.message : 'Failed to load repositories'}
               </p>
             ) : (
-              <ul className="py-1">
-                {(projects.data?.value ?? []).map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-800/80 ${
-                        projectId === p.id ? 'bg-slate-800 text-white' : 'text-slate-300'
-                      }`}
-                      onClick={() => setProject(p.id, p.name)}
-                    >
-                      {p.name}
-                    </button>
-                  </li>
-                ))}
+              <ul className="mt-1 space-y-0.5">
+                {(repos.data?.value ?? []).map((r) => {
+                  const expanded = expandedRepoIds.has(r.id)
+                  const isRepoActive = repositoryId === r.id
+                  return (
+                    <li key={r.id} className="rounded-lg">
+                      <div
+                        className={`rounded-lg ${
+                          isRepoActive && pullRequestId != null ? 'bg-slate-900/[0.04]' : ''
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          className="app-region-no-drag flex w-full items-center gap-2 rounded-lg px-1.5 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-900/5"
+                          onClick={() => toggleRepoExpanded(r.id)}
+                        >
+                          <HugeiconsIcon
+                            icon={expanded ? FolderOpenIcon : Folder01Icon}
+                            size={14}
+                            strokeWidth={1.5}
+                            className="shrink-0 text-slate-500"
+                            aria-hidden
+                          />
+                          <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                        </button>
+                      </div>
+                      {organization && projectName ? (
+                        <RepoPullRequestList
+                          key={r.id}
+                          organization={organization}
+                          projectName={projectName}
+                          repositoryId={r.id}
+                          expanded={expanded}
+                          selectedPullRequestId={repositoryId === r.id ? pullRequestId : null}
+                          onSelectPullRequest={(id) => selectPullRequestInRepository(r.id, r.name, id)}
+                        />
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
-          {projectName ? (
-            <>
-              <div className="border-b border-t border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Repositories
-              </div>
-              <div className="max-h-48 overflow-y-auto">
-                {repos.isLoading ? (
-                  <p className="p-3 text-sm text-slate-500">Loading…</p>
-                ) : repos.error ? (
-                  <p className="p-3 text-sm text-red-400">
-                    {repos.error instanceof Error ? repos.error.message : 'Failed to load repositories'}
-                  </p>
-                ) : (
-                  <ul className="py-1">
-                    {(repos.data?.value ?? []).map((r) => (
-                      <li key={r.id}>
-                        <button
-                          type="button"
-                          className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-800/80 ${
-                            repositoryId === r.id ? 'bg-slate-800 text-white' : 'text-slate-300'
-                          }`}
-                          onClick={() => setRepository(r.id, r.name)}
-                        >
-                          {r.name}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </>
-          ) : null}
-          {repositoryId ? (
-            <>
-              <div className="border-b border-t border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Pull requests
-              </div>
-              <div className="max-h-56 overflow-y-auto">
-                {prs.isLoading ? (
-                  <p className="p-3 text-sm text-slate-500">Loading…</p>
-                ) : prs.error ? (
-                  <p className="p-3 text-sm text-red-400">
-                    {prs.error instanceof Error ? prs.error.message : 'Failed to load pull requests'}
-                  </p>
-                ) : (prs.data?.value ?? []).length === 0 ? (
-                  <p className="p-3 text-sm text-slate-500">
-                    No pull requests returned for this repository (showing up to 100, all statuses).
-                  </p>
-                ) : (
-                  <ul className="py-1">
-                    {(prs.data?.value ?? []).map((prItem) => (
-                      <li key={prItem.pullRequestId}>
-                        <button
-                          type="button"
-                          className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-800/80 ${
-                            pullRequestId === prItem.pullRequestId
-                              ? 'bg-slate-800 text-white'
-                              : 'text-slate-300'
-                          }`}
-                          onClick={() => setPullRequest(prItem.pullRequestId)}
-                        >
-                          <span className="font-mono text-xs text-slate-500">!{prItem.pullRequestId}</span>{' '}
-                          {prItem.title}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </>
-          ) : null}
+
+          <SidenavAccountMenu
+            organization={organization}
+            projects={projects.data?.value ?? []}
+            projectsLoading={projects.isLoading}
+            projectsError={projects.error instanceof Error ? projects.error : null}
+            projectId={projectId}
+            projectName={projectName}
+            setProject={setProject}
+            onSignOut={() => disconnect.mutate()}
+            signOutPending={disconnect.isPending}
+          />
         </aside>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
           {!pullRequestId ? (
-            <div className="flex flex-1 items-center justify-center p-8 text-slate-500">
-              Select a pull request to review.
+            <div className="app-region-drag flex flex-1 items-center justify-center p-8">
+              <p className="app-region-no-drag text-sm text-slate-500">Select a pull request to review.</p>
             </div>
           ) : (
             <>
-              <div className="border-b border-slate-800 px-4 py-3">
+              <div className="app-region-drag shrink-0 border-b border-slate-200 px-5 py-3">
                 {pr.isLoading ? (
                   <p className="text-sm text-slate-500">Loading pull request…</p>
                 ) : pr.data ? (
                   <div>
-                    <h2 className="text-lg font-medium text-white">
-                      <span className="font-mono text-cyan-400">!{pr.data.pullRequestId}</span> {pr.data.title}
+                    <h2 className="text-lg font-medium text-slate-900">
+                      <span className="font-mono text-cyan-700">!{pr.data.pullRequestId}</span> {pr.data.title}
                     </h2>
                     <p className="mt-1 text-xs text-slate-500">
                       {pr.data.status}
@@ -240,7 +278,7 @@ export function MainWorkspace() {
                       {iterationId != null ? ` · iteration ${iterationId}` : ''}
                     </p>
                     {repositoryName ? (
-                      <p className="mt-1 font-mono text-xs text-slate-400">
+                      <p className="mt-1 font-mono text-xs text-slate-500">
                         {repositoryName}: {pr.data.sourceRefName ?? ''} → {pr.data.targetRefName ?? ''}
                       </p>
                     ) : null}
@@ -248,55 +286,61 @@ export function MainWorkspace() {
                 ) : null}
               </div>
               <div className="flex min-h-0 flex-1">
-                <div className="w-72 shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-900/30 p-2">
-                  <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Files</div>
-                  {changes.isLoading ? (
-                    <p className="text-sm text-slate-500">Loading changes…</p>
-                  ) : entries.length === 0 ? (
-                    <p className="text-sm text-slate-500">No file changes in this iteration.</p>
-                  ) : (
-                    <ul className="space-y-0.5">
-                      {entries.map((e) => {
-                        const path = e.item?.path ?? ''
-                        const t = normalizeChangeType(e.changeType)
-                        return (
-                          <li key={`${path}-${String(e.changeType)}`}>
-                            <button
-                              type="button"
-                              className={`block w-full rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-slate-800/80 ${
-                                selectedChangePath === path ? 'bg-slate-800 text-white' : 'text-slate-300'
-                              }`}
-                              onClick={() => setSelectedChangePath(path)}
-                            >
-                              <span className="mr-2 text-slate-500">{t}</span>
-                              {path.replace(/^\//, '')}
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
+                <div className="app-region-drag flex w-72 shrink-0 min-h-0 flex-col border-r border-slate-200 bg-slate-50/80 p-2">
+                  <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto">
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Files</div>
+                    {changes.isLoading ? (
+                      <p className="text-sm text-slate-500">Loading changes…</p>
+                    ) : entries.length === 0 ? (
+                      <p className="text-sm text-slate-500">No file changes in this iteration.</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {entries.map((e) => {
+                          const path = e.item?.path ?? ''
+                          const t = normalizeChangeType(e.changeType)
+                          return (
+                            <li key={`${path}-${String(e.changeType)}`}>
+                              <button
+                                type="button"
+                                className={`block w-full rounded-md px-2 py-1.5 text-left font-mono text-xs hover:bg-white ${
+                                  selectedChangePath === path
+                                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                                    : 'text-slate-700'
+                                }`}
+                                onClick={() => setSelectedChangePath(path)}
+                              >
+                                <span className="mr-2 text-slate-400">{t}</span>
+                                {path.replace(/^\//, '')}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
-                  {!selectedChangePath ? (
-                    <p className="text-sm text-slate-500">Select a file to view its diff.</p>
-                  ) : fileDiff.isLoading ? (
-                    <p className="text-sm text-slate-500">Loading file contents…</p>
-                  ) : fileDiff.error ? (
-                    <p className="text-sm text-red-400">
-                      {fileDiff.error instanceof Error ? fileDiff.error.message : 'Failed to load diff'}
-                    </p>
-                  ) : fileDiff.data?.kind === 'binary' ? (
-                    <p className="text-sm text-slate-400">
-                      Binary or non-text file — diff view is only available for text files.
-                    </p>
-                  ) : fileDiff.data?.kind === 'text' ? (
-                    <FileDiffPane
-                      displayPath={fileDiff.data.displayPath}
-                      oldText={fileDiff.data.oldText}
-                      newText={fileDiff.data.newText}
-                    />
-                  ) : null}
+                <div className="app-region-drag flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50 p-3">
+                  <div className="app-region-no-drag flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    {!selectedChangePath ? (
+                      <p className="text-sm text-slate-500">Select a file to view its diff.</p>
+                    ) : fileDiff.isLoading ? (
+                      <p className="text-sm text-slate-500">Loading file contents…</p>
+                    ) : fileDiff.error ? (
+                      <p className="text-sm text-red-600">
+                        {fileDiff.error instanceof Error ? fileDiff.error.message : 'Failed to load diff'}
+                      </p>
+                    ) : fileDiff.data?.kind === 'binary' ? (
+                      <p className="text-sm text-slate-600">
+                        Binary or non-text file — diff view is only available for text files.
+                      </p>
+                    ) : fileDiff.data?.kind === 'text' ? (
+                      <FileDiffPane
+                        displayPath={fileDiff.data.displayPath}
+                        oldText={fileDiff.data.oldText}
+                        newText={fileDiff.data.newText}
+                      />
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </>

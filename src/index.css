@@ -10,5 +10,83 @@ body,
 
 body {
   margin: 0;
-  @apply bg-slate-950 text-slate-100 antialiased;
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+@layer utilities {
+  .app-region-drag {
+    -webkit-app-region: drag;
+  }
+
+  .app-region-no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+.scroll-viewport {
+  scrollbar-width: thin;
+}
+
+:root .scroll-viewport {
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+
+.dark .scroll-viewport {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.scroll-viewport::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.scroll-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-viewport::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 7px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scroll-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+  background-clip: padding-box;
+}
+
+.dark .scroll-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: padding-box;
+}
+
+.dark .scroll-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  background-clip: padding-box;
+}
+
+.scroll-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* macOS Electron: window is transparent + vibrancy; only intentional panels stay opaque */
+html.electron-mac-vibrancy,
+html.electron-mac-vibrancy body,
+html.electron-mac-vibrancy #root {
+  background-color: transparent !important;
+}
+
+/* Sidebar: transparent so native vibrancy (BrowserWindow on macOS) shows through */
+.sidebar-translucent {
+  background: transparent !important;
+}
+
+/* Light mode: default sidebar chrome reads clearly on vibrancy (Tailwind utilities still override per element) */
+html:not(.dark) .sidebar-translucent {
+  color: #0f0f0f;
+}
+
+html:not(.dark) .sidebar-translucent .sidenav-footer {
+  background-color: transparent;
 }

@@ -5,6 +5,18 @@ import electron from 'vite-plugin-electron/simple'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  worker: {
+    format: 'es',
+  },
+  optimizeDeps: {
+    include: [
+      '@pierre/diffs',
+      '@pierre/diffs/react',
+      '@pierre/diffs/worker/worker.js',
+      '@pierre/theme/pierre-dark',
+      '@pierre/theme/pierre-light',
+    ],
+  },
   plugins: [
     react(),
     electron({

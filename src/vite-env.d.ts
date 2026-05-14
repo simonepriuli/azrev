@@ -3,6 +3,7 @@
 declare global {
   interface Window {
     azrev?: {
+      platform?: NodeJS.Platform
       auth: {
         setConnection: (payload: {
           organization: string
@@ -19,8 +20,9 @@ declare global {
           body?: unknown
           accept?: string
         }) => Promise<
-          | { status: number; contentType: string | null; kind: 'json'; json: unknown }
-          | { status: number; contentType: string | null; kind: 'text'; text: string }
+          | { success: true; status: number; contentType: string | null; kind: 'json'; json: unknown }
+          | { success: true; status: number; contentType: string | null; kind: 'text'; text: string }
+          | { success: false; status: number; message: string }
         >
       }
     }

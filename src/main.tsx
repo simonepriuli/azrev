@@ -1,8 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { AppErrorBoundary } from './components/AppErrorBoundary.tsx'
+import { DiffWorkerProvider } from './providers/DiffWorkerProvider.tsx'
 import App from './App.tsx'
 import './index.css'
+
+if (typeof window !== 'undefined' && window.azrev?.platform === 'darwin') {
+  document.documentElement.classList.add('electron-mac-vibrancy')
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,9 +19,11 @@ const queryClient = new QueryClient({
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  <AppErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <DiffWorkerProvider>
+        <App />
+      </DiffWorkerProvider>
     </QueryClientProvider>
-  </React.StrictMode>,
+  </AppErrorBoundary>,
 )

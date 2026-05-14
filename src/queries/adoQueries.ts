@@ -48,7 +48,9 @@ export function usePullRequests(
   organization: string | undefined,
   projectName: string | undefined,
   repositoryId: string | undefined,
+  options?: { enabled?: boolean },
 ) {
+  const extraEnabled = options?.enabled ?? true
   return useQuery({
     queryKey: ['ado', 'prs', organization, projectName, repositoryId],
     queryFn: () =>
@@ -58,7 +60,7 @@ export function usePullRequests(
           repositoryId!,
         )}/pullrequests?searchCriteria.status=all&$top=100`,
       ),
-    enabled: Boolean(organization && projectName && repositoryId),
+    enabled: extraEnabled && Boolean(organization && projectName && repositoryId),
   })
 }
 
@@ -202,11 +204,7 @@ async function fetchFileAtCommit(
     resolveLfs: 'true',
   })
   const pathAfterOrg = `${projectName}/_apis/git/repositories/${repositoryId}/items?${sp.toString()}`
-  try {
-    return await adoGetText(organization, pathAfterOrg)
-  } catch {
-    return ''
-  }
+  return adoGetText(organization, pathAfterOrg)
 }
 
 function looksLikeText(content: string): boolean {

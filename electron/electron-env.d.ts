@@ -16,12 +16,14 @@ type AzrevAdoRequestPayload = {
 }
 
 type AzrevAdoResponse =
-  | { status: number; contentType: string | null; kind: 'json'; json: unknown }
-  | { status: number; contentType: string | null; kind: 'text'; text: string }
+  | { success: true; status: number; contentType: string | null; kind: 'json'; json: unknown }
+  | { success: true; status: number; contentType: string | null; kind: 'text'; text: string }
+  | { success: false; status: number; message: string }
 
 declare global {
   interface Window {
     azrev: {
+      platform: NodeJS.Platform
       auth: {
         setConnection: (payload: {
           organization: string

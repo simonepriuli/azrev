@@ -1,3 +1,4 @@
+import process from 'node:process'
 import { contextBridge, ipcRenderer } from 'electron'
 
 export type AdoRequestPayload = {
@@ -9,10 +10,12 @@ export type AdoRequestPayload = {
 }
 
 export type AdoResponse =
-  | { status: number; contentType: string | null; kind: 'json'; json: unknown }
-  | { status: number; contentType: string | null; kind: 'text'; text: string }
+  | { success: true; status: number; contentType: string | null; kind: 'json'; json: unknown }
+  | { success: true; status: number; contentType: string | null; kind: 'text'; text: string }
+  | { success: false; status: number; message: string }
 
 contextBridge.exposeInMainWorld('azrev', {
+  platform: process.platform,
   auth: {
     setConnection: (payload: { organization: string; pat: string }) =>
       ipcRenderer.invoke('auth:set-connection', payload) as Promise<{ ok: true }>,

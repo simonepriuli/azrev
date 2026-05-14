@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { Buffer } from 'node:buffer'
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
+// Chromium may log GPU/network child-process crashes on some macOS + driver combos
+// (often harmless — services restart). Set AZREV_SAFE_GRAPHICS=1 before launch if
+// the window stays blank or the renderer flakes after those messages.
+if (process.env.AZREV_SAFE_GRAPHICS === '1') {
+  app.disableHardwareAcceleration()
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 process.env.APP_ROOT = path.join(__dirname, '..')
@@ -122,10 +129,20 @@ function basicAuthHeader(pat: string): string {
 let win: BrowserWindow | null
 
 function createWindow() {
+  const isDarwin = process.platform === 'darwin'
   win = new BrowserWindow({
     width: 1280,
     height: 800,
+    backgroundColor: isDarwin ? '#00000000' : '#f8fafc',
     icon: path.join(process.env.VITE_PUBLIC!, 'electron-vite.svg'),
+    ...(isDarwin
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 14 },
+          transparent: true,
+          vibrancy: 'sidebar' as const,
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -237,14 +254,26 @@ ipcMain.handle(
           msg = raw.slice(0, 500)
         }
       }
-      throw new Error(msg)
+      return { success: false as const, status: res.status, message: msg }
     }
     if (contentType?.includes('application/json')) {
       const json = (await res.json()) as unknown
-      return { status: res.status, contentType, kind: 'json' as const, json }
+      return {
+        success: true as const,
+        status: res.status,
+        contentType,
+        kind: 'json' as const,
+        json,
+      }
     }
     const text = await res.text()
-    return { status: res.status, contentType, kind: 'text' as const, text }
+    return {
+      success: true as const,
+      status: res.status,
+      contentType,
+      kind: 'text' as const,
+      text,
+    }
   },
 )
 
