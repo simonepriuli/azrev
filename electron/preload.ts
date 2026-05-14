@@ -15,6 +15,9 @@ export type AdoResponse =
 
 contextBridge.exposeInMainWorld('azrev', {
   platform: process.platform,
+  nativeVibrancyEnabled:
+    process.platform === 'darwin' &&
+    process.env.AZREV_DISABLE_NATIVE_VIBRANCY !== '1',
   auth: {
     setConnection: (payload: { organization: string; pat: string }) =>
       ipcRenderer.invoke('auth:set-connection', payload) as Promise<{ ok: true }>,

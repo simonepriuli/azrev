@@ -1,5 +1,5 @@
-import { parseDiffFromFile } from '@pierre/diffs'
-import { FileDiff } from '@pierre/diffs/react'
+import { parseDiffFromFile, setLanguageOverride } from '@pierre/diffs'
+import { FileDiff, Virtualizer } from '@pierre/diffs/react'
 import { useMemo } from 'react'
 
 type Props = {
@@ -11,35 +11,64 @@ type Props = {
 export function FileDiffPane({ displayPath, oldText, newText }: Props) {
   const fileDiff = useMemo(() => {
     try {
-      return parseDiffFromFile(
-        { name: displayPath, contents: oldText },
-        { name: displayPath, contents: newText },
+      const oldFile = {
+        name: displayPath,
+        contents: oldText,
+        cacheKey: `${displayPath}:old:${oldText.length}`,
+        lang: 'text' as const,
+      }
+      const newFile = {
+        name: displayPath,
+        contents: newText,
+        cacheKey: `${displayPath}:new:${newText.length}`,
+        lang: 'text' as const,
+      }
+
+      return setLanguageOverride(
+        parseDiffFromFile(oldFile, newFile, { context: 3 }),
+        'text',
       )
     } catch {
       return null
     }
-  }, [displayPath, oldText, newText])
+  }, [displayPath, newText, oldText])
 
   if (!fileDiff) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
-        Unable to compute a diff for this file (it may be too large or not text-based).
+        Unable to compute a diff for this file.
       </div>
     )
   }
 
   return (
-    <div className="scroll-viewport min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+    <Virtualizer
+      className="scroll-viewport min-h-0 min-w-0 flex-1 overflow-auto bg-white"
+      contentClassName="min-h-full min-w-full"
+      config={{
+        overscrollSize: 300,
+      }}
+    >
       <FileDiff
-        key={displayPath}
+        key={fileDiff.cacheKey ?? displayPath}
         fileDiff={fileDiff}
-        disableWorkerPool
+        metrics={{
+          hunkLineCount: 50,
+          lineHeight: 20,
+          diffHeaderHeight: 44,
+          hunkSeparatorHeight: 32,
+          fileGap: 8,
+        }}
         options={{
           theme: 'pierre-light',
           diffStyle: 'unified',
+          hunkSeparators: 'line-info-basic',
+          lineDiffType: 'none',
+          maxLineDiffLength: 0,
+          tokenizeMaxLineLength: 200,
           overflow: 'wrap',
         }}
       />
-    </div>
+    </Virtualizer>
   )
 }

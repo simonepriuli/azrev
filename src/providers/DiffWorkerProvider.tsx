@@ -16,12 +16,16 @@ export function DiffWorkerProvider({ children }: { children: ReactNode }) {
     <WorkerPoolContextProvider
       poolOptions={{
         workerFactory: createDiffWorker,
-        poolSize: 4,
+        poolSize: 1,
       }}
       highlighterOptions={{
-        theme: 'pierre-dark',
+        theme: 'pierre-light',
         preferredHighlighter: 'shiki-js',
-        langs: [],
+        langs: ['text'],
+        lineDiffType: 'none',
+        maxLineDiffLength: 0,
+        tokenizeMaxLineLength: 200,
+        useTokenTransformer: false,
       }}
     >
       {children}

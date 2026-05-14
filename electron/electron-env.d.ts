@@ -24,6 +24,7 @@ declare global {
   interface Window {
     azrev: {
       platform: NodeJS.Platform
+      nativeVibrancyEnabled: boolean
       auth: {
         setConnection: (payload: {
           organization: string

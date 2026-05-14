@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { ConnectForm } from './components/ConnectForm'
 import { MainWorkspace } from './components/MainWorkspace'
-import { useAuthStatus } from './queries/adoQueries'
+import { authStatusQueryKey, useAuthStatus } from './queries/adoQueries'
 
 const electronMacVibrancy =
-  typeof window !== 'undefined' && window.azrev?.platform === 'darwin'
+  typeof window !== 'undefined' && window.azrev?.nativeVibrancyEnabled === true
 
 const appShellBg = electronMacVibrancy ? 'bg-white' : 'bg-slate-50'
 
@@ -29,7 +30,7 @@ export default function App() {
         <button
           type="button"
           className="text-sm font-medium text-cyan-700 hover:underline"
-          onClick={() => void qc.invalidateQueries({ queryKey: ['auth'] })}
+          onClick={() => void qc.invalidateQueries({ queryKey: authStatusQueryKey })}
         >
           Retry
         </button>
@@ -39,11 +40,25 @@ export default function App() {
 
   if (!auth.data?.configured) {
     return (
-      <div className={`flex min-h-screen items-center justify-center p-6 ${appShellBg}`}>
-        <ConnectForm />
-      </div>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <div className={`app-region-drag flex min-h-screen items-center justify-center p-6 ${appShellBg}`}>
+              <ConnectForm />
+            </div>
+          }
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
     )
   }
 
-  return <MainWorkspace />
+  return (
+    <Routes>
+      <Route path="/" element={<MainWorkspace />} />
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }

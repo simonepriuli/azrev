@@ -10,9 +10,14 @@ import type {
   TeamProjectReference,
 } from '../lib/adoTypes'
 
+export const authStatusQueryKey = ['auth', 'status'] as const
+
+const MAX_INLINE_DIFF_CHARS = 1_000_000
+const MAX_INLINE_DIFF_LINES = 20_000
+
 export function useAuthStatus() {
   return useQuery({
-    queryKey: ['auth', 'status'],
+    queryKey: authStatusQueryKey,
     queryFn: async () => {
       if (!window.azrev) {
         return { configured: false as const }
@@ -219,6 +224,21 @@ function looksLikeText(content: string): boolean {
   return control / Math.max(sample.length, 1) < 0.02
 }
 
+function lineCount(content: string): number {
+  if (content.length === 0) return 0
+  let count = 1
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10) count++
+  }
+  return count
+}
+
+function isTooLargeForInlineDiff(oldText: string, newText: string): boolean {
+  const totalChars = oldText.length + newText.length
+  if (totalChars > MAX_INLINE_DIFF_CHARS) return true
+  return lineCount(oldText) + lineCount(newText) > MAX_INLINE_DIFF_LINES
+}
+
 export type CommitPair = {
   sourceRefCommit?: { commitId?: string }
   targetRefCommit?: { commitId?: string }
@@ -252,24 +272,29 @@ export function useSelectedFileDiff(
       if (!organization || !projectName || !repositoryId || !itemPath || !sourceId || !targetId) {
         throw new Error('Missing iteration commits or path')
       }
-      const oldText = await fetchFileAtCommit(
-        organization,
-        projectName,
-        repositoryId,
-        itemPath,
-        targetId,
-      )
-      const newText = await fetchFileAtCommit(
-        organization,
-        projectName,
-        repositoryId,
-        itemPath,
-        sourceId,
-      )
+      const [oldText, newText] = await Promise.all([
+        fetchFileAtCommit(
+          organization,
+          projectName,
+          repositoryId,
+          itemPath,
+          targetId,
+        ),
+        fetchFileAtCommit(
+          organization,
+          projectName,
+          repositoryId,
+          itemPath,
+          sourceId,
+        ),
+      ])
       const oldOk = looksLikeText(oldText)
       const newOk = looksLikeText(newText)
       if (!oldOk || !newOk) {
         return { kind: 'binary' as const, displayPath: itemPath }
+      }
+      if (isTooLargeForInlineDiff(oldText, newText)) {
+        return { kind: 'too-large' as const, displayPath: itemPath }
       }
       return {
         kind: 'text' as const,

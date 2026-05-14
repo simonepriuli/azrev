@@ -2,8 +2,10 @@ import { Folder01Icon, FolderOpenIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { readStoredProjectId, writeStoredProjectId } from '../lib/selectedProjectStorage'
 import {
+  authStatusQueryKey,
   useAuthStatus,
   useIterationChanges,
   useIterationDetail,
@@ -24,10 +26,11 @@ const isMacUA =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)
 
 const electronMacVibrancy =
-  typeof window !== 'undefined' && window.azrev?.platform === 'darwin'
+  typeof window !== 'undefined' && window.azrev?.nativeVibrancyEnabled === true
 
 export function MainWorkspace() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const auth = useAuthStatus()
   const organization = auth.data?.organization
 
@@ -148,8 +151,9 @@ export function MainWorkspace() {
       await window.azrev.auth.clearConnection()
     },
     onSuccess: async () => {
-      qc.clear()
-      await qc.invalidateQueries({ queryKey: ['auth'] })
+      qc.removeQueries({ queryKey: ['ado'] })
+      qc.setQueryData(authStatusQueryKey, { configured: false })
+      navigate('/login', { replace: true })
     },
   })
 
@@ -180,11 +184,7 @@ export function MainWorkspace() {
               : 'bg-white/55 backdrop-blur-xl backdrop-saturate-150'
           }`}
         >
-          <div
-            className={`app-region-drag flex h-11 shrink-0 items-center border-b border-slate-200/60 px-3 ${
-              isMac ? 'pl-[76px]' : ''
-            }`}
-          >
+          <div className={`app-region-drag flex h-11 shrink-0 items-center px-3 ${isMac ? 'pl-[76px]' : ''}`}>
             <span className="truncate text-xs font-semibold tracking-tight text-slate-500">AzRev</span>
           </div>
 
@@ -285,31 +285,40 @@ export function MainWorkspace() {
                 ) : null}
               </div>
               <div className="flex min-h-0 flex-1">
-                <div className="app-region-drag flex w-72 shrink-0 min-h-0 flex-col border-r border-slate-200 bg-slate-50/80 p-2">
-                  <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto">
-                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Files</div>
+                <div className="app-region-drag flex w-96 shrink-0 min-h-0 flex-col border-r border-slate-200 bg-white">
+                  <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                    <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Files</div>
                     {changes.isLoading ? (
                       <p className="text-sm text-slate-500">Loading changes…</p>
                     ) : entries.length === 0 ? (
                       <p className="text-sm text-slate-500">No file changes in this iteration.</p>
                     ) : (
-                      <ul className="space-y-0.5">
+                      <ul className="space-y-px">
                         {entries.map((e) => {
                           const path = e.item?.path ?? ''
                           const t = normalizeChangeType(e.changeType)
+                          const isSelected = selectedChangePath === path
+                          const displayPath = path.replace(/^\//, '')
                           return (
                             <li key={`${path}-${String(e.changeType)}`}>
                               <button
                                 type="button"
-                                className={`block w-full rounded-md px-2 py-1.5 text-left font-mono text-xs hover:bg-white ${
-                                  selectedChangePath === path
-                                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
-                                    : 'text-slate-700'
+                                title={displayPath}
+                                className={`group flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left font-mono text-xs transition-colors ${
+                                  isSelected
+                                    ? 'bg-slate-100 text-slate-950'
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950'
                                 }`}
                                 onClick={() => setSelectedChangePath(path)}
                               >
-                                <span className="mr-2 text-slate-400">{t}</span>
-                                {path.replace(/^\//, '')}
+                                <span
+                                  className={`w-9 shrink-0 text-[11px] ${
+                                    isSelected ? 'text-cyan-700' : 'text-slate-400 group-hover:text-slate-500'
+                                  }`}
+                                >
+                                  {t}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate">{displayPath}</span>
                               </button>
                             </li>
                           )
@@ -318,8 +327,8 @@ export function MainWorkspace() {
                     )}
                   </div>
                 </div>
-                <div className="app-region-drag flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50 p-3">
-                  <div className="app-region-no-drag flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                <div className="app-region-drag flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50">
+                  <div className="app-region-no-drag flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     {!selectedChangePath ? (
                       <p className="text-sm text-slate-500">Select a file to view its diff.</p>
                     ) : fileDiff.isLoading ? (
@@ -331,6 +340,10 @@ export function MainWorkspace() {
                     ) : fileDiff.data?.kind === 'binary' ? (
                       <p className="text-sm text-slate-600">
                         Binary or non-text file — diff view is only available for text files.
+                      </p>
+                    ) : fileDiff.data?.kind === 'too-large' ? (
+                      <p className="text-sm text-slate-600">
+                        This file is too large to display safely in the inline diff viewer.
                       </p>
                     ) : fileDiff.data?.kind === 'text' ? (
                       <FileDiffPane

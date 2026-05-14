@@ -4,11 +4,16 @@ import { fileURLToPath } from 'node:url'
 import { Buffer } from 'node:buffer'
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
-// Chromium may log GPU/network child-process crashes on some macOS + driver combos
-// (often harmless — services restart). Set AZREV_SAFE_GRAPHICS=1 before launch if
-// the window stays blank or the renderer flakes after those messages.
-if (process.env.AZREV_SAFE_GRAPHICS === '1') {
+const hardwareAccelerationEnabled = process.env.AZREV_ENABLE_HARDWARE_ACCELERATION === '1'
+const nativeVibrancyEnabled =
+  process.platform === 'darwin' &&
+  process.env.AZREV_DISABLE_NATIVE_VIBRANCY !== '1'
+
+// Keep the default renderer path boring and software-rendered. The native macOS
+// transparent/vibrancy path can make Chromium's GPU process take the renderer down.
+if (!hardwareAccelerationEnabled) {
   app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -29,6 +34,12 @@ const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'settings.json')
 type Settings = {
   organization: string
 }
+
+const MAX_TEXT_RESPONSE_BYTES = 2 * 1024 * 1024
+
+type LimitedTextResult =
+  | { ok: true; text: string }
+  | { ok: false; bytesRead: number }
 
 function readSettings(): Settings | null {
   try {
@@ -126,6 +137,41 @@ function basicAuthHeader(pat: string): string {
   return `Basic ${token}`
 }
 
+async function readLimitedText(res: Response): Promise<LimitedTextResult> {
+  const contentLength = Number.parseInt(res.headers.get('content-length') ?? '', 10)
+  if (Number.isFinite(contentLength) && contentLength > MAX_TEXT_RESPONSE_BYTES) {
+    return { ok: false, bytesRead: contentLength }
+  }
+
+  if (!res.body) {
+    const text = await res.text()
+    const bytesRead = Buffer.byteLength(text, 'utf-8')
+    return bytesRead > MAX_TEXT_RESPONSE_BYTES
+      ? { ok: false, bytesRead }
+      : { ok: true, text }
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  const parts: string[] = []
+  let bytesRead = 0
+
+  let next = await reader.read()
+  while (!next.done) {
+    const { value } = next
+    bytesRead += value.byteLength
+    if (bytesRead > MAX_TEXT_RESPONSE_BYTES) {
+      await reader.cancel()
+      return { ok: false, bytesRead }
+    }
+    parts.push(decoder.decode(value, { stream: true }))
+    next = await reader.read()
+  }
+
+  parts.push(decoder.decode())
+  return { ok: true, text: parts.join('') }
+}
+
 let win: BrowserWindow | null
 
 function createWindow() {
@@ -133,14 +179,18 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
-    backgroundColor: isDarwin ? '#00000000' : '#f8fafc',
+    backgroundColor: nativeVibrancyEnabled ? '#00000000' : '#f8fafc',
     icon: path.join(process.env.VITE_PUBLIC!, 'electron-vite.svg'),
     ...(isDarwin
       ? {
           titleBarStyle: 'hiddenInset' as const,
           trafficLightPosition: { x: 14, y: 14 },
-          transparent: true,
-          vibrancy: 'sidebar' as const,
+          ...(nativeVibrancyEnabled
+            ? {
+                transparent: true,
+                vibrancy: 'sidebar' as const,
+              }
+            : {}),
         }
       : {}),
     webPreferences: {
@@ -149,6 +199,14 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
+  })
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[AzRev] renderer process gone', details)
+  })
+
+  win.webContents.on('unresponsive', () => {
+    console.error('[AzRev] renderer became unresponsive')
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -266,13 +324,20 @@ ipcMain.handle(
         json,
       }
     }
-    const text = await res.text()
+    const textResult = await readLimitedText(res)
+    if (!textResult.ok) {
+      return {
+        success: false as const,
+        status: 413,
+        message: `File response is too large to display safely (${textResult.bytesRead} bytes, limit ${MAX_TEXT_RESPONSE_BYTES} bytes).`,
+      }
+    }
     return {
       success: true as const,
       status: res.status,
       contentType,
       kind: 'text' as const,
-      text,
+      text: textResult.text,
     }
   },
 )
