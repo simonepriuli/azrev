@@ -43,7 +43,7 @@ export function FileDiffPane({ displayPath, oldText, newText }: Props) {
 
   return (
     <Virtualizer
-      className="scroll-viewport min-h-0 min-w-0 flex-1 overflow-auto bg-white"
+      className="min-h-0 min-w-0 flex-1 overflow-auto bg-white"
       contentClassName="min-h-full min-w-full"
       config={{
         overscrollSize: 300,
@@ -60,7 +60,6 @@ export function FileDiffPane({ displayPath, oldText, newText }: Props) {
           fileGap: 8,
         }}
         options={{
-          theme: 'pierre-light',
           diffStyle: 'unified',
           hunkSeparators: 'line-info-basic',
           lineDiffType: 'none',

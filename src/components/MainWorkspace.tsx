@@ -84,8 +84,6 @@ function SidenavPullRequestFilterMenu({
   onToggleOpen,
   onStatusFiltersChange,
 }: SidenavPullRequestFilterMenuProps) {
-  const isDefaultStatusSelection = statusFilters.length === defaultPullRequestStatusFilters.length
-
   const toggleStatusFilter = (statusFilter: PullRequestStatusFilter) => {
     if (statusFilters.includes(statusFilter)) {
       onStatusFiltersChange(statusFilters.filter((value) => value !== statusFilter))
@@ -101,9 +99,7 @@ function SidenavPullRequestFilterMenu({
         aria-label="Filter pull requests"
         aria-expanded={open}
         aria-haspopup="dialog"
-        className={`flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900/5 hover:text-slate-800 ${
-          open || !isDefaultStatusSelection ? 'bg-slate-900/5 text-slate-800' : ''
-        }`}
+        className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900/5 hover:text-slate-800"
         onClick={onToggleOpen}
       >
         <HugeiconsIcon icon={FilterMailIcon} size={15} strokeWidth={1.6} aria-hidden />
@@ -211,6 +207,10 @@ function getPullRequestStatusPresentation(status: string): PullRequestStatusPres
         className: 'text-amber-700',
       }
   }
+}
+
+function formatBranchRef(refName: string | null | undefined) {
+  return refName?.replace(/^refs\/heads\//, '').replace(/^refs\/tags\//, '') ?? 'Unknown branch'
 }
 
 export function MainWorkspace() {
@@ -424,14 +424,9 @@ export function MainWorkspace() {
               <ul className="mt-1 space-y-0.5">
                 {(repos.data?.value ?? []).map((r) => {
                   const expanded = expandedRepoIds.has(r.id)
-                  const isRepoActive = repositoryId === r.id
                   return (
                     <li key={r.id} className="rounded-lg">
-                      <div
-                        className={`rounded-lg ${
-                          isRepoActive && pullRequestId != null ? 'bg-slate-900/[0.04]' : ''
-                        }`}
-                      >
+                      <div className="rounded-lg">
                         <button
                           type="button"
                           aria-expanded={expanded}
@@ -512,9 +507,28 @@ export function MainWorkspace() {
                       {iterationId != null ? ` · iteration ${iterationId}` : ''}
                     </p>
                     {repositoryName ? (
-                      <p className="mt-1 font-mono text-xs text-slate-500">
-                        {repositoryName}: {pr.data.sourceRefName ?? ''} → {pr.data.targetRefName ?? ''}
-                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="font-mono text-slate-400">{repositoryName}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            from
+                          </span>
+                          <span className="font-mono text-slate-700" title={pr.data.sourceRefName ?? undefined}>
+                            {formatBranchRef(pr.data.sourceRefName)}
+                          </span>
+                        </span>
+                        <span className="text-slate-300" aria-hidden>
+                          →
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            into
+                          </span>
+                          <span className="font-mono text-slate-700" title={pr.data.targetRefName ?? undefined}>
+                            {formatBranchRef(pr.data.targetRefName)}
+                          </span>
+                        </span>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}

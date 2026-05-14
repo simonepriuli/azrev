@@ -19,7 +19,6 @@ export function DiffWorkerProvider({ children }: { children: ReactNode }) {
         poolSize: 1,
       }}
       highlighterOptions={{
-        theme: 'pierre-light',
         preferredHighlighter: 'shiki-js',
         langs: ['text'],
         lineDiffType: 'none',
