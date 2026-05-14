@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { Buffer } from 'node:buffer'
 import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 
+const APP_NAME = 'AZrev'
 const hardwareAccelerationEnabled = process.env.AZREV_ENABLE_HARDWARE_ACCELERATION === '1'
 const nativeVibrancyEnabled =
   process.platform === 'darwin' &&
   process.env.AZREV_DISABLE_NATIVE_VIBRANCY !== '1'
+
+app.setName(APP_NAME)
 
 // Keep the default renderer path boring and software-rendered. The native macOS
 // transparent/vibrancy path can make Chromium's GPU process take the renderer down.
@@ -186,6 +189,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1280,
     height: 800,
+    title: APP_NAME,
     backgroundColor: nativeVibrancyEnabled ? '#00000000' : '#f8fafc',
     icon: APP_ICON_PATH,
     ...(isDarwin
@@ -209,11 +213,11 @@ function createWindow() {
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[AzRev] renderer process gone', details)
+    console.error(`[${APP_NAME}] renderer process gone`, details)
   })
 
   win.webContents.on('unresponsive', () => {
-    console.error('[AzRev] renderer became unresponsive')
+    console.error(`[${APP_NAME}] renderer became unresponsive`)
   })
 
   if (VITE_DEV_SERVER_URL) {

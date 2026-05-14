@@ -12,7 +12,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[AzRev]', error, info.componentStack)
+    console.error('[AZrev]', error, info.componentStack)
   }
 
   render() {

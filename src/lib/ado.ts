@@ -1,7 +1,7 @@
 function getAzrev() {
   const api = window.azrev
   if (!api) {
-    throw new Error('AzRev must run inside the Electron shell (window.azrev missing).')
+    throw new Error('AZrev must run inside the Electron shell (window.azrev missing).')
   }
   return api
 }

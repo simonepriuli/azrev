@@ -3,11 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "Read-only Azure DevOps pull request review (Electron)",
-  "author": "AzRev",
+  "author": "AZrev",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/prepare-dev-electron-name.mjs && vite",
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
