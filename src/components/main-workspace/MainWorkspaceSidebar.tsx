@@ -29,7 +29,9 @@ type MainWorkspaceSidebarProps = {
   statusFilterOpen: boolean
   onToggleStatusFilterOpen: () => void
   pullRequestStatusFilters: PullRequestStatusFilter[]
+  assignedToMeOnly: boolean
   onPullRequestStatusFiltersChange: (filters: PullRequestStatusFilter[]) => void
+  onAssignedToMeOnlyChange: (assignedToMeOnly: boolean) => void
   projectName: string | null
   organization: string | undefined
   repos: ReposState
@@ -54,7 +56,9 @@ export function MainWorkspaceSidebar({
   statusFilterOpen,
   onToggleStatusFilterOpen,
   pullRequestStatusFilters,
+  assignedToMeOnly,
   onPullRequestStatusFiltersChange,
+  onAssignedToMeOnlyChange,
   projectName,
   organization,
   repos,
@@ -99,8 +103,10 @@ export function MainWorkspaceSidebar({
               rootRef={statusFilterRef}
               open={statusFilterOpen}
               statusFilters={pullRequestStatusFilters}
+              assignedToMeOnly={assignedToMeOnly}
               onToggleOpen={onToggleStatusFilterOpen}
               onStatusFiltersChange={onPullRequestStatusFiltersChange}
+              onAssignedToMeOnlyChange={onAssignedToMeOnlyChange}
             />
           </div>
           {!projectName ? (
@@ -142,6 +148,7 @@ export function MainWorkspaceSidebar({
                         repositoryId={r.id}
                         expanded={expanded}
                         statusFilters={pullRequestStatusFilters}
+                        assignedToMeOnly={assignedToMeOnly}
                         selectedPullRequestId={repositoryId === r.id ? pullRequestId : null}
                         onSelectPullRequest={(id) => onSelectPullRequestInRepository(r.id, r.name, id)}
                       />

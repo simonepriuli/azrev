@@ -34,6 +34,11 @@ function getPullRequestStatusFilter(status: string): PullRequestStatusFilter | '
   }
 }
 
+function isPullRequestReviewerDotEligible(prItem: GitPullRequest) {
+  const status = getPullRequestStatusFilter(prItem.status)
+  return prItem.isDraft === true || status === 'open' || status === 'draft'
+}
+
 function sortPullRequestsByRecency(items: GitPullRequest[]) {
   return [...items].sort((a, b) => {
     const ta = a.creationDate ? new Date(a.creationDate).getTime() : 0
@@ -49,6 +54,7 @@ type Props = {
   repositoryId: string
   expanded: boolean
   statusFilters: readonly PullRequestStatusFilter[]
+  assignedToMeOnly: boolean
   selectedPullRequestId: number | null
   onSelectPullRequest: (pullRequestId: number) => void
 }
@@ -59,6 +65,7 @@ export function RepoPullRequestList({
   repositoryId,
   expanded,
   statusFilters,
+  assignedToMeOnly,
   selectedPullRequestId,
   onSelectPullRequest,
 }: Props) {
@@ -75,7 +82,7 @@ export function RepoPullRequestList({
     [prs.data?.value],
   )
 
-  const filtered = useMemo(() => {
+  const statusFiltered = useMemo(() => {
     const selectedStatuses = new Set(statusFilters)
     return sorted.filter((prItem) => {
       const status = getPullRequestStatusFilter(prItem.status)
@@ -83,13 +90,15 @@ export function RepoPullRequestList({
     })
   }, [sorted, statusFilters])
 
-  const visible = useMemo(() => {
-    if (showAll || filtered.length <= VISIBLE_PR_COUNT) return filtered
-    return filtered.slice(0, VISIBLE_PR_COUNT)
-  }, [filtered, showAll])
+  const statusVisible = useMemo(() => {
+    if (showAll || statusFiltered.length <= VISIBLE_PR_COUNT) return statusFiltered
+    return statusFiltered.slice(0, VISIBLE_PR_COUNT)
+  }, [statusFiltered, showAll])
+
+  const reviewerQueryItems = assignedToMeOnly ? statusFiltered : statusVisible
 
   const reviewerBackdropQueries = useQueries({
-    queries: visible.map((prItem) => ({
+    queries: reviewerQueryItems.map((prItem) => ({
       queryKey: pullRequestReviewersQueryKey(organization, projectName, repositoryId, prItem.pullRequestId),
       queryFn: () =>
         fetchPullRequestReviewers(
@@ -106,6 +115,33 @@ export function RepoPullRequestList({
     })),
   })
 
+  const reviewersByPullRequestId = useMemo(() => {
+    return new Map(
+      reviewerQueryItems.map((prItem, index) => {
+        const fetched = reviewerBackdropQueries[index]?.data
+        const reviewers = fetched != null && fetched.length > 0 ? fetched : (prItem.reviewers ?? [])
+        return [prItem.pullRequestId, reviewers] as const
+      }),
+    )
+  }, [reviewerBackdropQueries, reviewerQueryItems])
+
+  const reviewerFiltered = useMemo(() => {
+    if (!assignedToMeOnly) return statusFiltered
+    return statusFiltered.filter((prItem) =>
+      isAssignedReviewer(
+        reviewersByPullRequestId.get(prItem.pullRequestId) ?? prItem.reviewers,
+        currentReviewerIdentities.identities,
+      ),
+    )
+  }, [assignedToMeOnly, currentReviewerIdentities.identities, reviewersByPullRequestId, statusFiltered])
+
+  const filtered = assignedToMeOnly ? reviewerFiltered : statusFiltered
+
+  const visible = useMemo(() => {
+    if (showAll || filtered.length <= VISIBLE_PR_COUNT) return filtered
+    return filtered.slice(0, VISIBLE_PR_COUNT)
+  }, [filtered, showAll])
+
   const hasMore = filtered.length > VISIBLE_PR_COUNT
 
   if (!expanded) {
@@ -113,35 +149,32 @@ export function RepoPullRequestList({
   }
 
   return (
-    <ul className="ml-5 mt-0.5 space-y-0.5 pb-1">
+    <ul className="mt-0.5 space-y-0.5 pb-1">
       {prs.isLoading ? (
-        <li className="py-1 text-xs text-slate-500">Loading…</li>
+        <li className="px-7 py-1 text-xs text-slate-500">Loading…</li>
       ) : prs.error ? (
-        <li className="py-1 text-xs text-red-600">
+        <li className="px-7 py-1 text-xs text-red-600">
           {prs.error instanceof Error ? prs.error.message : 'Failed to load pull requests'}
         </li>
       ) : sorted.length === 0 ? (
-        <li className="py-1 text-xs text-slate-500">No pull requests.</li>
+        <li className="px-7 py-1 text-xs text-slate-500">No pull requests.</li>
       ) : filtered.length === 0 ? (
-        <li className="py-1 text-xs text-slate-500">No pull requests matching filter.</li>
+        <li className="px-7 py-1 text-xs text-slate-500">No pull requests matching filter.</li>
       ) : (
         <>
-          {visible.map((prItem, index) => {
+          {visible.map((prItem) => {
             const rel = formatRelativeShort(prItem.creationDate)
             const selected = selectedPullRequestId === prItem.pullRequestId
-            const fetchResult = reviewerBackdropQueries[index]
-            const fetched = fetchResult?.data
             const resolvedReviewers =
-              fetched != null && fetched.length > 0 ? fetched : (prItem.reviewers ?? [])
-            const showReviewerDot = isAssignedReviewer(
-              resolvedReviewers,
-              currentReviewerIdentities.identities,
-            )
+              reviewersByPullRequestId.get(prItem.pullRequestId) ?? prItem.reviewers ?? []
+            const showReviewerDot =
+              isPullRequestReviewerDotEligible(prItem) &&
+              isAssignedReviewer(resolvedReviewers, currentReviewerIdentities.identities)
             return (
               <li key={prItem.pullRequestId}>
                 <button
                   type="button"
-                  className={`app-region-no-drag flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-slate-900/5 ${
+                  className={`app-region-no-drag relative flex w-full items-start gap-2 rounded-md py-1.5 pl-7 pr-2 text-left text-xs transition-colors hover:bg-slate-900/5 ${
                     selected ? 'bg-slate-900/10 text-slate-900' : 'text-slate-700'
                   }`}
                   onClick={() => onSelectPullRequest(prItem.pullRequestId)}
@@ -151,14 +184,13 @@ export function RepoPullRequestList({
                       : undefined
                   }
                 >
-                  <span
-                    className="flex w-4 shrink-0 justify-center pt-1"
-                    title={showReviewerDot ? 'Assigned to you for review' : undefined}
-                  >
-                    {showReviewerDot ? (
-                      <span className="h-2 w-2 rounded-full bg-blue-600" aria-hidden />
-                    ) : null}
-                  </span>
+                  {showReviewerDot ? (
+                    <span
+                      className="absolute left-2.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-blue-600"
+                      title="Assigned to you for review"
+                      aria-hidden
+                    />
+                  ) : null}
                   <span className="min-w-0 flex-1 truncate">
                     <span className="font-mono text-[10px] text-slate-400">!{prItem.pullRequestId}</span>{' '}
                     <span className="font-medium">{prItem.title}</span>

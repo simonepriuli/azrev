@@ -5,6 +5,7 @@ import {
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
   Tick01Icon,
+  UserCheck01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import type { IconSvgElement } from '@hugeicons/react'
@@ -53,16 +54,20 @@ type SidenavPullRequestFilterMenuProps = {
   rootRef: RefObject<HTMLDivElement>
   open: boolean
   statusFilters: readonly PullRequestStatusFilter[]
+  assignedToMeOnly: boolean
   onToggleOpen: () => void
   onStatusFiltersChange: (statusFilters: PullRequestStatusFilter[]) => void
+  onAssignedToMeOnlyChange: (assignedToMeOnly: boolean) => void
 }
 
 export function SidenavPullRequestFilterMenu({
   rootRef,
   open,
   statusFilters,
+  assignedToMeOnly,
   onToggleOpen,
   onStatusFiltersChange,
+  onAssignedToMeOnlyChange,
 }: SidenavPullRequestFilterMenuProps) {
   const toggleStatusFilter = (statusFilter: PullRequestStatusFilter) => {
     if (statusFilters.includes(statusFilter)) {
@@ -132,6 +137,40 @@ export function SidenavPullRequestFilterMenu({
                   </button>
                 )
               })}
+            </div>
+
+            <div className={`${panelRow} mt-2 text-xs font-medium ${textHeaderLabel}`}>
+              <span className="min-w-0 truncate">Reviewers</span>
+            </div>
+
+            <div role="menu" aria-label="Reviewer filters">
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={assignedToMeOnly}
+                className={`${panelRow} rounded-lg text-left text-xs font-normal ${textPrimary} ${rowHover}`}
+                onClick={() => onAssignedToMeOnlyChange(!assignedToMeOnly)}
+              >
+                <HugeiconsIcon
+                  icon={UserCheck01Icon}
+                  size={15}
+                  strokeWidth={1.5}
+                  className={`shrink-0 ${iconMuted}`}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">Assigned to me</span>
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden>
+                  {assignedToMeOnly ? (
+                    <HugeiconsIcon
+                      icon={Tick01Icon}
+                      size={14}
+                      strokeWidth={1.75}
+                      className={iconPrimary}
+                      aria-hidden
+                    />
+                  ) : null}
+                </span>
+              </button>
             </div>
           </div>
         </div>

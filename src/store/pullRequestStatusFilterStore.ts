@@ -24,28 +24,41 @@ function parsePersistedStatusFilters(raw: unknown): PullRequestStatusFilter[] {
 
 export type PullRequestStatusFilterStore = {
   statusFilters: PullRequestStatusFilter[]
+  assignedToMeOnly: boolean
   setStatusFilters: (filters: PullRequestStatusFilter[]) => void
+  setAssignedToMeOnly: (assignedToMeOnly: boolean) => void
 }
 
 export const usePullRequestStatusFilterStore = create<PullRequestStatusFilterStore>()(
   persist(
     (set) => ({
       statusFilters: [...defaultPullRequestStatusFilters],
+      assignedToMeOnly: false,
       setStatusFilters: (filters) => set({ statusFilters: [...filters] }),
+      setAssignedToMeOnly: (assignedToMeOnly) => set({ assignedToMeOnly }),
     }),
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ statusFilters: state.statusFilters }),
+      partialize: (state) => ({
+        statusFilters: state.statusFilters,
+        assignedToMeOnly: state.assignedToMeOnly,
+      }),
       merge: (persistedState, currentState) => {
         if (persistedState == null || typeof persistedState !== 'object') {
           return currentState
         }
         const record = persistedState as Record<string, unknown>
-        if (!('statusFilters' in record)) return currentState
         return {
           ...currentState,
-          statusFilters: parsePersistedStatusFilters(record.statusFilters),
+          statusFilters:
+            'statusFilters' in record
+              ? parsePersistedStatusFilters(record.statusFilters)
+              : currentState.statusFilters,
+          assignedToMeOnly:
+            typeof record.assignedToMeOnly === 'boolean'
+              ? record.assignedToMeOnly
+              : currentState.assignedToMeOnly,
         }
       },
     },

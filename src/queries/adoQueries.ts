@@ -39,6 +39,14 @@ export function pullRequestReviewersQueryKey(
   return ['ado', 'prReviewers', organization, projectName, repositoryId, pullRequestId] as const
 }
 
+export function pullRequestsQueryKey(
+  organization: string | undefined,
+  projectName: string | undefined,
+  repositoryId: string | undefined,
+) {
+  return ['ado', 'prs', organization, projectName, repositoryId] as const
+}
+
 export async function fetchPullRequestReviewers(
   organization: string,
   projectName: string,
@@ -175,7 +183,7 @@ export function useApprovePullRequestMutation() {
           queryKey: ['ado', 'pr', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
         }),
         qc.invalidateQueries({
-          queryKey: ['ado', 'prs', vars.organization, vars.projectName, vars.repositoryId],
+          queryKey: pullRequestsQueryKey(vars.organization, vars.projectName, vars.repositoryId),
         }),
         qc.invalidateQueries({
           queryKey: ['ado', 'prReviewers', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
@@ -218,7 +226,7 @@ export function useCompletePullRequestMutation() {
           queryKey: ['ado', 'pr', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
         }),
         qc.invalidateQueries({
-          queryKey: ['ado', 'prs', vars.organization, vars.projectName, vars.repositoryId],
+          queryKey: pullRequestsQueryKey(vars.organization, vars.projectName, vars.repositoryId),
         }),
         qc.invalidateQueries({
           queryKey: ['ado', 'prIterations', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
@@ -260,7 +268,7 @@ export function usePullRequests(
 ) {
   const extraEnabled = options?.enabled ?? true
   return useQuery({
-    queryKey: ['ado', 'prs', organization, projectName, repositoryId],
+    queryKey: pullRequestsQueryKey(organization, projectName, repositoryId),
     queryFn: () =>
       adoGetJson<PagedResult<GitPullRequest>>(
         organization!,

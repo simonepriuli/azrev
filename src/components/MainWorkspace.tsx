@@ -49,7 +49,9 @@ export function MainWorkspace() {
 
   const [expandedRepoIds, setExpandedRepoIds] = useState(() => new Set<string>())
   const pullRequestStatusFilters = usePullRequestStatusFilterStore((s) => s.statusFilters)
+  const assignedToMeOnly = usePullRequestStatusFilterStore((s) => s.assignedToMeOnly)
   const setPullRequestStatusFilters = usePullRequestStatusFilterStore((s) => s.setStatusFilters)
+  const setAssignedToMeOnly = usePullRequestStatusFilterStore((s) => s.setAssignedToMeOnly)
   const [statusFilterOpen, setStatusFilterOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showMainSidebarToggle, setShowMainSidebarToggle] = useState(false)
@@ -354,7 +356,9 @@ export function MainWorkspace() {
           statusFilterOpen={statusFilterOpen}
           onToggleStatusFilterOpen={() => setStatusFilterOpen((v) => !v)}
           pullRequestStatusFilters={pullRequestStatusFilters}
+          assignedToMeOnly={assignedToMeOnly}
           onPullRequestStatusFiltersChange={setPullRequestStatusFilters}
+          onAssignedToMeOnlyChange={setAssignedToMeOnly}
           projectName={projectName}
           organization={organization}
           repos={repos}

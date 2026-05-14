@@ -45,6 +45,7 @@ export type GitPullRequest = {
   title: string
   status: string
   creationDate?: string
+  isDraft?: boolean
   sourceRefName?: string
   targetRefName?: string
   reviewers?: GitPullRequestReviewer[]
