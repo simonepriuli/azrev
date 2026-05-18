@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { adoGetJson, adoGetText, adoPatchJson, adoPutJson } from '../lib/ado'
+import { adoGetJson, adoGetText, adoPatchJson, adoPostJson, adoPutJson } from '../lib/ado'
 import type {
+  AdoComment,
   AdoConnectionData,
   AdoIdentityRef,
+  CommentThreadContext,
+  GitPullRequestCommentThread,
   GitPullRequest,
   GitPullRequestChangeEntry,
   GitPullRequestDetail,
@@ -45,6 +48,62 @@ export function pullRequestsQueryKey(
   repositoryId: string | undefined,
 ) {
   return ['ado', 'prs', organization, projectName, repositoryId] as const
+}
+
+export function pullRequestThreadsQueryKey(
+  organization: string | undefined,
+  projectName: string | undefined,
+  repositoryId: string | undefined,
+  pullRequestId: number | undefined,
+  baseIterationId?: number,
+  iterationId?: number,
+) {
+  return [
+    'ado',
+    'prThreads',
+    organization,
+    projectName,
+    repositoryId,
+    pullRequestId,
+    baseIterationId,
+    iterationId,
+  ] as const
+}
+
+function pullRequestThreadsQueryPrefix(
+  organization: string,
+  projectName: string,
+  repositoryId: string,
+  pullRequestId: number,
+) {
+  return ['ado', 'prThreads', organization, projectName, repositoryId, pullRequestId] as const
+}
+
+function pullRequestThreadsPath(
+  projectName: string,
+  repositoryId: string,
+  pullRequestId: number,
+) {
+  return `${projectName}/_apis/git/repositories/${encodeURIComponent(
+    repositoryId,
+  )}/pullRequests/${pullRequestId}/threads`
+}
+
+function pullRequestThreadsListPath(
+  projectName: string,
+  repositoryId: string,
+  pullRequestId: number,
+  baseIterationId?: number,
+  iterationId?: number,
+) {
+  const path = pullRequestThreadsPath(projectName, repositoryId, pullRequestId)
+  if (baseIterationId == null || iterationId == null) return path
+
+  const searchParams = new URLSearchParams({
+    $baseIteration: String(baseIterationId),
+    $iteration: String(iterationId),
+  })
+  return `${path}?${searchParams.toString()}`
 }
 
 export async function fetchPullRequestReviewers(
@@ -235,6 +294,158 @@ export function useCompletePullRequestMutation() {
           queryKey: ['ado', 'prReviewers', vars.organization, vars.projectName, vars.repositoryId, vars.pullRequestId],
         }),
       ])
+    },
+  })
+}
+
+type CreatePullRequestThreadComment = {
+  content: string
+  parentCommentId?: number
+}
+
+export type CreatePullRequestThreadVariables = {
+  organization: string
+  projectName: string
+  repositoryId: string
+  pullRequestId: number
+  content: string
+  threadContext?: CommentThreadContext
+  changeTrackingId?: number
+  baseIterationId?: number
+  iterationId?: number
+}
+
+export type ReplyToPullRequestThreadVariables = {
+  organization: string
+  projectName: string
+  repositoryId: string
+  pullRequestId: number
+  threadId: number
+  parentCommentId: number
+  content: string
+}
+
+function createTextComment({ content, parentCommentId = 0 }: CreatePullRequestThreadComment) {
+  return {
+    parentCommentId,
+    content,
+    commentType: 1,
+  }
+}
+
+function createPullRequestThreadBody(vars: CreatePullRequestThreadVariables) {
+  const body: {
+    comments: ReturnType<typeof createTextComment>[]
+    status: number
+    threadContext?: CommentThreadContext
+    pullRequestThreadContext?: {
+      changeTrackingId?: number
+      iterationContext?: {
+        firstComparingIteration: number
+        secondComparingIteration: number
+      }
+    }
+  } = {
+    comments: [createTextComment({ content: vars.content })],
+    status: 1,
+  }
+
+  if (vars.threadContext) {
+    body.threadContext = vars.threadContext
+  }
+
+  if (vars.changeTrackingId != null && vars.baseIterationId != null && vars.iterationId != null) {
+    body.pullRequestThreadContext = {
+      changeTrackingId: vars.changeTrackingId,
+      iterationContext: {
+        firstComparingIteration: vars.baseIterationId,
+        secondComparingIteration: vars.iterationId,
+      },
+    }
+  }
+
+  return body
+}
+
+export function usePullRequestThreads(
+  organization: string | undefined,
+  projectName: string | undefined,
+  repositoryId: string | undefined,
+  pullRequestId: number | undefined,
+  baseIterationId?: number,
+  iterationId?: number,
+) {
+  return useQuery({
+    queryKey: pullRequestThreadsQueryKey(
+      organization,
+      projectName,
+      repositoryId,
+      pullRequestId,
+      baseIterationId,
+      iterationId,
+    ),
+    queryFn: () =>
+      adoGetJson<PagedResult<GitPullRequestCommentThread>>(
+        organization!,
+        pullRequestThreadsListPath(
+          projectName!,
+          repositoryId!,
+          pullRequestId!,
+          baseIterationId,
+          iterationId,
+        ),
+      ),
+    enabled: Boolean(organization && projectName && repositoryId && pullRequestId != null),
+    staleTime: 15_000,
+  })
+}
+
+export function useCreatePullRequestThreadMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: CreatePullRequestThreadVariables) =>
+      adoPostJson<GitPullRequestCommentThread>(
+        vars.organization,
+        pullRequestThreadsPath(vars.projectName, vars.repositoryId, vars.pullRequestId),
+        createPullRequestThreadBody(vars),
+      ),
+    onSuccess: async (_, vars) => {
+      await qc.invalidateQueries({
+        queryKey: pullRequestThreadsQueryPrefix(
+          vars.organization,
+          vars.projectName,
+          vars.repositoryId,
+          vars.pullRequestId,
+        ),
+      })
+    },
+  })
+}
+
+export function useReplyToPullRequestThreadMutation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: ReplyToPullRequestThreadVariables) => {
+      const path = `${pullRequestThreadsPath(
+        vars.projectName,
+        vars.repositoryId,
+        vars.pullRequestId,
+      )}/${vars.threadId}/comments`
+      return adoPostJson<AdoComment>(
+        vars.organization,
+        path,
+        createTextComment({ content: vars.content, parentCommentId: vars.parentCommentId }),
+      )
+    },
+    onSuccess: async (_, vars) => {
+      await qc.invalidateQueries({
+        queryKey: pullRequestThreadsQueryPrefix(
+          vars.organization,
+          vars.projectName,
+          vars.repositoryId,
+          vars.pullRequestId,
+        ),
+      })
     },
   })
 }

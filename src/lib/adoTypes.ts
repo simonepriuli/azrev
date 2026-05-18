@@ -33,6 +33,76 @@ export type AdoIdentityRef = {
   memberIds?: string[]
 }
 
+export type AdoCommentType = 'unknown' | 'text' | 'codeChange' | 'system' | number
+
+export type AdoComment = {
+  id: number
+  parentCommentId?: number
+  author?: AdoIdentityRef
+  content?: string
+  publishedDate?: string
+  lastUpdatedDate?: string
+  lastContentUpdatedDate?: string
+  commentType?: AdoCommentType
+  isDeleted?: boolean
+  usersLiked?: AdoIdentityRef[]
+}
+
+export type CommentThreadStatus =
+  | 'unknown'
+  | 'active'
+  | 'fixed'
+  | 'wontFix'
+  | 'closed'
+  | 'byDesign'
+  | 'pending'
+  | number
+
+export type CommentPosition = {
+  line: number
+  offset: number
+}
+
+export type CommentThreadContext = {
+  filePath?: string
+  leftFileStart?: CommentPosition | null
+  leftFileEnd?: CommentPosition | null
+  rightFileStart?: CommentPosition | null
+  rightFileEnd?: CommentPosition | null
+}
+
+export type CommentIterationContext = {
+  firstComparingIteration: number
+  secondComparingIteration: number
+}
+
+export type GitPullRequestCommentThreadContext = {
+  changeTrackingId?: number
+  iterationContext?: CommentIterationContext
+  trackingCriteria?: {
+    firstComparingIteration?: number
+    secondComparingIteration?: number
+    origFilePath?: string
+    origLeftFileStart?: CommentPosition
+    origLeftFileEnd?: CommentPosition
+    origRightFileStart?: CommentPosition
+    origRightFileEnd?: CommentPosition
+  }
+}
+
+export type GitPullRequestCommentThread = {
+  id: number
+  comments?: AdoComment[]
+  status?: CommentThreadStatus
+  threadContext?: CommentThreadContext | null
+  pullRequestThreadContext?: GitPullRequestCommentThreadContext | null
+  identities?: Record<string, AdoIdentityRef>
+  publishedDate?: string
+  lastUpdatedDate?: string
+  isDeleted?: boolean
+  properties?: Record<string, unknown>
+}
+
 export type GitPullRequestReviewer = AdoIdentityRef & {
   vote?: number
   isRequired?: boolean
@@ -73,6 +143,7 @@ export type GitPullRequestIteration = {
 
 export type GitPullRequestChangeEntry = {
   changeType: number | string
+  changeTrackingId?: number
   item?: {
     path?: string
     gitObjectType?: string

@@ -1,8 +1,10 @@
 import type { UseQueryResult } from '@tanstack/react-query'
-import type { GitPullRequestChangeEntry, GitPullRequestDetail } from '../../lib/adoTypes'
+import { useMemo } from 'react'
+import type { DiffLineAnnotation } from '@pierre/diffs'
+import type { GitPullRequestChangeEntry, GitPullRequestCommentThread, GitPullRequestDetail } from '../../lib/adoTypes'
 import { normalizeChangeType } from '../../queries/adoQueries'
-import { FileDiffPane } from '../FileDiffPane'
-import { ApplicationHeader } from './ApplicationHeader'
+import { FileDiffPane, type InlineCommentDraft, type InlineThreadAnnotation } from '../FileDiffPane'
+import { ApplicationHeader, CommentsPanelToolbarButton } from './ApplicationHeader'
 import type { PullRequestHeaderActions } from './pullRequestActionUiState'
 import type { PullRequestStatusPresentation } from './pullRequestStatusPresentation'
 import { formatBranchRef } from './pullRequestStatusPresentation'
@@ -12,6 +14,17 @@ type SelectedFileDiffData =
   | { kind: 'binary'; displayPath: string }
   | { kind: 'too-large'; displayPath: string }
   | { kind: 'text'; displayPath: string; oldText: string; newText: string }
+
+type PullRequestCommentActions = {
+  threads: GitPullRequestCommentThread[]
+  threadsLoading: boolean
+  threadsError: unknown
+  creatingThread: boolean
+  replyingThread: boolean
+  onCreateGeneralComment: (content: string) => Promise<void>
+  onReplyToThread: (threadId: number, parentCommentId: number, content: string) => Promise<void>
+  onCreateInlineThread: (draft: InlineCommentDraft, content: string) => Promise<void>
+}
 
 type PullRequestReviewWorkspaceProps = {
   showMainSidebarToggle: boolean
@@ -31,6 +44,46 @@ type PullRequestReviewWorkspaceProps = {
   pullRequestActions?: PullRequestHeaderActions
   pullRequestMutationError: string | null
   onDismissPullRequestMutationError: () => void
+  commentActions: PullRequestCommentActions
+  commentsPanelOpen: boolean
+  commentsPanelCount: number
+  onToggleCommentsPanel: () => void
+}
+
+function normalizePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+function activeThreadComments(thread: GitPullRequestCommentThread) {
+  return (thread.comments ?? []).filter((comment) => !comment.isDeleted)
+}
+
+function inlineThreadAnnotations(
+  threads: GitPullRequestCommentThread[],
+  selectedChangePath: string | null,
+): DiffLineAnnotation<InlineThreadAnnotation>[] {
+  if (!selectedChangePath) return []
+  const normalizedSelectedPath = normalizePath(selectedChangePath)
+
+  return threads.flatMap((thread) => {
+    const context = thread.threadContext
+    const lineNumber = context?.rightFileStart?.line
+    if (thread.isDeleted || !context?.filePath || lineNumber == null) return []
+    if (normalizePath(context.filePath) !== normalizedSelectedPath) return []
+
+    const comments = activeThreadComments(thread)
+    return [
+      {
+        side: 'additions',
+        lineNumber,
+        metadata: {
+          threadId: thread.id,
+          commentCount: comments.length,
+          preview: comments[0]?.content ?? '',
+        },
+      },
+    ]
+  })
 }
 
 export function PullRequestReviewWorkspace({
@@ -51,20 +104,38 @@ export function PullRequestReviewWorkspace({
   pullRequestActions,
   pullRequestMutationError,
   onDismissPullRequestMutationError,
+  commentActions,
+  commentsPanelOpen,
+  commentsPanelCount,
+  onToggleCommentsPanel,
 }: PullRequestReviewWorkspaceProps) {
+  const selectedInlineThreadAnnotations = useMemo(
+    () => inlineThreadAnnotations(commentActions.threads, selectedChangePath),
+    [commentActions.threads, selectedChangePath],
+  )
+
   return (
-    <>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
       <div className="app-region-drag shrink-0 border-b border-slate-200 px-5 pb-3 pt-2">
         {prLoading ? (
-          <div className="flex items-start gap-3">
-            {showMainSidebarToggle ? (
-              <SidebarToggleButton
-                expanded={false}
-                className={`shrink-0 transition-opacity duration-200 ${isMac ? 'ml-14' : ''}`}
-                onClick={onToggleSidebar}
+          <div className="flex w-full min-w-0 items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              {showMainSidebarToggle ? (
+                <SidebarToggleButton
+                  expanded={false}
+                  className={`shrink-0 transition-opacity duration-200 ${isMac ? 'ml-14' : ''}`}
+                  onClick={onToggleSidebar}
+                />
+              ) : null}
+              <p className="text-sm text-slate-500">Loading pull request…</p>
+            </div>
+            <div className="app-region-no-drag shrink-0">
+              <CommentsPanelToolbarButton
+                open={commentsPanelOpen}
+                count={commentsPanelCount}
+                onToggle={onToggleCommentsPanel}
               />
-            ) : null}
-            <p className="text-sm text-slate-500">Loading pull request…</p>
+            </div>
           </div>
         ) : prDetail && pullRequestStatus ? (
           <div className="min-w-0 w-full">
@@ -77,6 +148,11 @@ export function PullRequestReviewWorkspace({
               status={pullRequestStatus}
               onToggleSidebar={onToggleSidebar}
               pullRequestActions={pullRequestActions}
+              commentsPanelToggle={{
+                open: commentsPanelOpen,
+                count: commentsPanelCount,
+                onToggle: onToggleCommentsPanel,
+              }}
             />
             {pullRequestMutationError ? (
               <div className="app-region-no-drag mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-950">
@@ -118,8 +194,8 @@ export function PullRequestReviewWorkspace({
           </div>
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="app-region-drag flex w-96 shrink-0 min-h-0 flex-col border-r border-slate-200 bg-white">
+      <div className="flex min-h-0 flex-1 items-stretch">
+        <div className="app-region-drag flex h-full min-h-0 w-96 shrink-0 flex-col self-stretch border-r border-slate-200 bg-white">
           <div className="app-region-no-drag scroll-viewport min-h-0 flex-1 overflow-y-auto px-3 py-3">
             <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Files</div>
             {changesLoading ? (
@@ -161,7 +237,7 @@ export function PullRequestReviewWorkspace({
             )}
           </div>
         </div>
-        <div className="app-region-drag flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50/50">
+        <div className="app-region-drag flex h-full min-h-0 min-w-0 flex-1 flex-col self-stretch bg-slate-50">
           <div className="app-region-no-drag flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             {!selectedChangePath ? (
               <p className="flex flex-1 items-center justify-center text-sm text-slate-500">
@@ -186,11 +262,14 @@ export function PullRequestReviewWorkspace({
                 displayPath={fileDiff.data.displayPath}
                 oldText={fileDiff.data.oldText}
                 newText={fileDiff.data.newText}
+                inlineThreadAnnotations={selectedInlineThreadAnnotations}
+                inlineCommentPending={commentActions.creatingThread}
+                onCreateInlineThread={commentActions.onCreateInlineThread}
               />
             ) : null}
           </div>
         </div>
       </div>
-    </>
+    </div>
   )
 }

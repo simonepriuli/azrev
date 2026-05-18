@@ -1,8 +1,47 @@
-import { GitMergeIcon, Tick02Icon } from "@hugeicons/core-free-icons";
+import {
+  GitMergeIcon,
+  PanelRightCloseIcon,
+  PanelRightOpenIcon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { PullRequestHeaderActions } from "./pullRequestActionUiState";
 import type { PullRequestStatusPresentation } from "./pullRequestStatusPresentation";
 import { SidebarToggleButton } from "./SidebarToggleButton";
+
+export type CommentsPanelToolbarButtonProps = {
+  open: boolean;
+  count: number;
+  onToggle: () => void;
+};
+
+export function CommentsPanelToolbarButton({
+  open,
+  count,
+  onToggle,
+}: CommentsPanelToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      className="app-region-no-drag relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-900/5 hover:text-slate-800"
+      title={open ? "Hide comments panel" : "Show comments panel"}
+      aria-expanded={open}
+      aria-label={open ? "Hide comments panel" : "Show comments panel"}
+      onClick={onToggle}
+    >
+      <HugeiconsIcon
+        icon={open ? PanelRightCloseIcon : PanelRightOpenIcon}
+        size={16}
+        strokeWidth={1.7}
+      />
+      {!open && count > 0 ? (
+        <span className="absolute -right-0.5 -top-0.5 flex min-h-4 min-w-[1rem] items-center justify-center rounded-full bg-cyan-600 px-1 text-[10px] font-semibold tabular-nums text-white shadow-sm ring-2 ring-white">
+          {count > 99 ? "99+" : count}
+        </span>
+      ) : null}
+    </button>
+  );
+}
 
 type ApplicationHeaderProps = {
   reserveSidebarToggleSpace: boolean;
@@ -13,6 +52,7 @@ type ApplicationHeaderProps = {
   status: PullRequestStatusPresentation;
   onToggleSidebar: () => void;
   pullRequestActions?: PullRequestHeaderActions;
+  commentsPanelToggle?: CommentsPanelToolbarButtonProps;
 };
 
 export function ApplicationHeader({
@@ -24,13 +64,14 @@ export function ApplicationHeader({
   status,
   onToggleSidebar,
   pullRequestActions,
+  commentsPanelToggle,
 }: ApplicationHeaderProps) {
   const showActionRow =
     pullRequestActions &&
     (pullRequestActions.showApprove || pullRequestActions.showMerge);
 
   return (
-    <div className="flex w-full min-w-0 items-center justify-between gap-3">
+    <div className="flex w-full min-w-0 items-center justify-between gap-4">
       <div className="flex min-w-0 flex-1 items-center">
         <div
           className={`shrink-0 overflow-hidden transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
@@ -66,8 +107,9 @@ export function ApplicationHeader({
         </h2>
       </div>
 
-      {showActionRow && pullRequestActions ? (
-        <div className="app-region-no-drag flex shrink-0 items-center gap-2">
+      <div className="app-region-no-drag flex shrink-0 items-center gap-2">
+        {showActionRow && pullRequestActions ? (
+          <>
           {pullRequestActions.showApprove ? (
             <button
               type="button"
@@ -126,8 +168,19 @@ export function ApplicationHeader({
               </span>
             </button>
           ) : null}
-        </div>
-      ) : null}
+        </>
+        ) : null}
+        {showActionRow && pullRequestActions && commentsPanelToggle ? (
+          <span className="hidden h-7 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
+        ) : null}
+        {commentsPanelToggle ? (
+          <CommentsPanelToolbarButton
+            open={commentsPanelToggle.open}
+            count={commentsPanelToggle.count}
+            onToggle={commentsPanelToggle.onToggle}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

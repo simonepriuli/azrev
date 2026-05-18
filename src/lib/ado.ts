@@ -55,6 +55,22 @@ export async function adoPatchJson<T>(organization: string, pathAfterOrg: string
   return res.json as T
 }
 
+export async function adoPostJson<T>(organization: string, pathAfterOrg: string, body: unknown): Promise<T> {
+  const res = await getAzrev().ado.request({
+    organization,
+    pathAfterOrg,
+    method: 'POST',
+    body,
+  })
+  if (!res.success) {
+    throw new Error(res.message)
+  }
+  if (res.kind !== 'json') {
+    throw new Error('Expected JSON from Azure DevOps')
+  }
+  return res.json as T
+}
+
 export async function adoPutJson<T>(organization: string, pathAfterOrg: string, body: unknown): Promise<T> {
   const res = await getAzrev().ado.request({
     organization,
